@@ -31,7 +31,7 @@ class AutomationService {
           simulatorManager.registerMeter({
             assetId: row.asset_id,
             zoneId: row.zone_id,
-            type: row.meter_type,
+            type: (row.meter_type === 'CONSUMER' ? 'CONSUMER' : 'PROSUMER'),
             capacityKw: parseFloat(row.capacity_kw),
             hasBattery: row.battery_enabled,
             batteryCapacityKwh: row.battery_enabled ? parseFloat(row.capacity_kw) * 2 : 0,

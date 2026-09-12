@@ -10,5 +10,6 @@ router.get('/transactions', verifyToken, walletController.getTransactions);
 router.post('/deposit', verifyToken, walletController.requestDeposit);
 router.get('/deposits', verifyToken, requireRole(['admin']), walletController.getDeposits);
 router.post('/deposits/:id/approve', verifyToken, requireRole(['admin']), walletController.approveDeposit);
+router.post('/deposits/:id/reject', verifyToken, requireRole(['admin']), walletController.rejectDeposit);
 
 module.exports = router;

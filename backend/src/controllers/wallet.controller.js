@@ -107,3 +107,22 @@ exports.approveDeposit = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.rejectDeposit = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const depositRes = await db.query('SELECT * FROM wallet_deposits WHERE id = $1 AND status = $2', [id, 'PENDING']);
+    if (depositRes.rows.length === 0) return res.status(404).json({ error: 'Pending deposit not found' });
+    
+    await db.query(
+      `UPDATE wallet_deposits SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3`,
+      ['REJECTED', req.user.id, id]
+    );
+    auditService.log(req.user.id, req.user.role, 'DEPOSIT_REJECTED', 'wallet_deposit', id, 'REJECTED', { reason }, req.ip);
+    res.json({ message: 'Deposit request rejected' });
+  } catch (err) {
+    next(err);
+  }
+};

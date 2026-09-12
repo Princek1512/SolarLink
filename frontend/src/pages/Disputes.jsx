@@ -40,7 +40,8 @@ export default function Disputes() {
       setResolvingId(null);
       fetchDisputes();
     } catch (err) {
-      toast.error('Error resolving dispute: ' + err.message);
+      const msg = typeof err === 'string' ? err : (err.message || err.toString());
+      toast.error('Error resolving dispute: ' + msg);
     }
   };
 

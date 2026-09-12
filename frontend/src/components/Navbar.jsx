@@ -31,30 +31,37 @@ export default function Navbar({ user }) {
           </Link>
           
           <nav className="flex items-center gap-1 nav-menu">
-            {user?.role !== 'admin' && (
-              <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>Dashboard</Link>
+            {user?.role === 'utility' && (
+              <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>Grid Console</Link>
             )}
-            
+
+            {user?.role === 'regulator' && (
+              <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>Compliance Console</Link>
+            )}
+
             {['prosumer', 'consumer'].includes(user?.role) && (
               <>
+                <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>Dashboard</Link>
                 <Link to="/marketplace" className={`nav-link ${isActive('/marketplace') ? 'active' : ''}`}>Marketplace</Link>
                 <Link to="/trades" className={`nav-link ${isActive('/trades') ? 'active' : ''}`}>My Trades</Link>
               </>
             )}
 
-            {['admin', 'regulator', 'utility'].includes(user?.role) && (
+            {user?.role === 'admin' && (
               <>
-                {user?.role === 'admin' && (
-                  <>
-                    <Link to="/admin/dashboard" className={`nav-link ${isActive('/admin/dashboard') ? 'active' : ''}`}>Dashboard</Link>
-                    <Link to="/admin/requests" className={`nav-link ${isActive('/admin/requests') ? 'active' : ''}`}>Requests</Link>
-                    <Link to="/admin/trades" className={`nav-link ${isActive('/admin/trades') ? 'active' : ''}`}>Trades</Link>
-                    <Link to="/admin/audit" className={`nav-link ${isActive('/admin/audit') ? 'active' : ''}`}>Audit</Link>
-                  </>
-                )}
-                <Link to="/disputes" className={`nav-link ${isActive('/disputes') ? 'active' : ''}`}>Disputes</Link>
-                <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>Platform Setup</Link>
+                <Link to="/admin/dashboard" className={`nav-link ${isActive('/admin/dashboard') ? 'active' : ''}`}>Dashboard</Link>
+                <Link to="/admin/requests" className={`nav-link ${isActive('/admin/requests') ? 'active' : ''}`}>Requests</Link>
+                <Link to="/admin/trades" className={`nav-link ${isActive('/admin/trades') ? 'active' : ''}`}>Trades</Link>
+                <Link to="/admin/audit" className={`nav-link ${isActive('/admin/audit') ? 'active' : ''}`}>Audit</Link>
               </>
+            )}
+
+            {user?.role === 'regulator' && (
+              <Link to="/disputes" className={`nav-link ${isActive('/disputes') ? 'active' : ''}`}>Disputes</Link>
+            )}
+
+            {user?.role === 'admin' && (
+              <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>Platform Setup</Link>
             )}
           </nav>
         </div>

@@ -3,6 +3,8 @@ import { Navigate } from 'react-router-dom';
 import api from '../services/api';
 import { toast } from '../utils/toast';
 import EnergyCard from '../components/EnergyCard';
+import UtilityDashboard from './UtilityDashboard';
+import RegulatorDashboard from './RegulatorDashboard';
 import { Zap, Activity, ShieldAlert, BarChart3, PlusCircle, ArrowUpRight } from 'lucide-react';
 
 export default function Dashboard({ user }) {
@@ -13,6 +15,17 @@ export default function Dashboard({ user }) {
   if (user?.role === 'admin') {
     return <Navigate to="/admin/dashboard" replace />;
   }
+
+  // Utility Companies & Grid Operators get dedicated Grid Operator Console
+  if (user?.role === 'utility') {
+    return <UtilityDashboard user={user} />;
+  }
+
+  // Energy Regulators get dedicated Platform Compliance & Audit Hub
+  if (user?.role === 'regulator') {
+    return <RegulatorDashboard user={user} />;
+  }
+
 
   useEffect(() => {
     const fetchDash = async () => {

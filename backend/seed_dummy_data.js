@@ -3,6 +3,9 @@ const db = require('./src/services/db.service');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
+const fs = require('fs');
+const path = require('path');
+
 function computeHash(data, prevHash = '0000000000000000000000000000000000000000000000000000000000000000') {
   return crypto.createHash('sha256').update(JSON.stringify(data) + prevHash).digest('hex');
 }
@@ -14,9 +17,14 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    // 1. Clean existing tables (cascade order)
-    console.log('Clearing existing records...');
-    await client.query('TRUNCATE audit_logs, user_requests, wallet_deposits, disputes, settlements, trade_events, trades, buy_orders, energy_listings, meter_readings, smart_meters, solar_assets, wallets, users, pricing_configs, grid_zones CASCADE');
+    // 1. Clean existing tables and recreate schema from schema.sql
+    console.log('Clearing existing tables and recreating schema...');
+    await client.query('DROP TABLE IF EXISTS audit_logs, user_requests, wallet_deposits, disputes, settlements, trade_events, trades, buy_orders, energy_listings, meter_readings, smart_meters, solar_assets, wallets, users, pricing_configs, grid_zones CASCADE');
+
+    const schemaPath = path.join(__dirname, '../database/schema.sql');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    await client.query(schemaSql);
+    console.log('Schema created successfully.');
 
     // 2. Insert Grid Zones
     console.log('Seeding Grid Zones...');

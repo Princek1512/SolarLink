@@ -329,6 +329,20 @@ exports.verifyDelivery = async (req, res, next) => {
         }
       }
 
+      // Release completed trade transmission load from grid_zones in DB (ACID compliance)
+      if (dbTrade.zone_id) {
+        const zLock = await client.query('SELECT * FROM grid_zones WHERE id = $1 FOR UPDATE', [dbTrade.zone_id]);
+        if (zLock.rows.length > 0) {
+          const zObj = zLock.rows[0];
+          const currentLoad = parseFloat(zObj.current_load_kw || 0);
+          const newLoad = Math.max(0, parseFloat((currentLoad - Number(dbTrade.quantity_kwh)).toFixed(2)));
+          const capacity = parseFloat(zObj.capacity_kw || 500);
+          const thresh = parseFloat(zObj.congestion_threshold || capacity * 0.8);
+          const newStatus = zObj.status === 'CONSTRAINED' && newLoad < capacity ? (newLoad >= thresh ? 'ELEVATED' : 'NORMAL') : zObj.status;
+          await client.query('UPDATE grid_zones SET current_load_kw = $1, status = $2 WHERE id = $3', [newLoad, newStatus, dbTrade.zone_id]);
+        }
+      }
+
       await client.query('COMMIT');
       await ensureFullTradeLifecycleEvents(id);
       await auditService.log(req.user.id, req.user.role, 'TRADE_SETTLED', 'trade', id, trade.status, { deliveredKwh: inputDeliveredKwh, settlement_gross: settlement.gross, disputed: settlement.isDisputed }, req.ip);
@@ -387,6 +401,20 @@ exports.autoProgress = async (req, res, next) => {
         }
       }
 
+      // Release completed trade transmission load from grid_zones in DB (ACID compliance)
+      if (dbTrade.zone_id) {
+        const zLock = await client.query('SELECT * FROM grid_zones WHERE id = $1 FOR UPDATE', [dbTrade.zone_id]);
+        if (zLock.rows.length > 0) {
+          const zObj = zLock.rows[0];
+          const currentLoad = parseFloat(zObj.current_load_kw || 0);
+          const newLoad = Math.max(0, parseFloat((currentLoad - Number(dbTrade.quantity_kwh)).toFixed(2)));
+          const capacity = parseFloat(zObj.capacity_kw || 500);
+          const thresh = parseFloat(zObj.congestion_threshold || capacity * 0.8);
+          const newStatus = zObj.status === 'CONSTRAINED' && newLoad < capacity ? (newLoad >= thresh ? 'ELEVATED' : 'NORMAL') : zObj.status;
+          await client.query('UPDATE grid_zones SET current_load_kw = $1, status = $2 WHERE id = $3', [newLoad, newStatus, dbTrade.zone_id]);
+        }
+      }
+
       await client.query('COMMIT');
       await ensureFullTradeLifecycleEvents(id);
       await auditService.log(req.user.id, req.user.role, 'TRADE_SETTLED', 'trade', id, trade.status, { auto_progress: true }, req.ip);
@@ -405,3 +433,26 @@ exports.autoProgress = async (req, res, next) => {
 exports.disputeTrade = async (req, res, next) => {
   res.status(501).json({ error: 'Dispute logic is handled automatically during delivery verification.' });
 };
+
+exports.flagTrade = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { compliance_note, flag_reason } = req.body;
+    const note = compliance_note || flag_reason || 'Flagged for regulatory compliance inspection';
+
+    const tradeRes = await db.query('SELECT * FROM trades WHERE id = $1', [id]);
+    if (tradeRes.rows.length === 0) return res.status(404).json({ error: 'Trade not found' });
+
+    const result = await db.query(
+      `UPDATE trades SET compliance_flagged = true, compliance_note = $1, flagged_by = $2 WHERE id = $3 RETURNING *`,
+      [note, req.user.id, id]
+    );
+
+    await auditService.log(req.user.id, req.user.role, 'TRADE_COMPLIANCE_FLAGGED', 'trade', id, 'FLAGGED', { compliance_note: note }, req.ip);
+
+    res.json({ message: 'Trade flagged for regulatory investigation', trade: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+

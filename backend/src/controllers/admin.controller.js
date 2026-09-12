@@ -45,8 +45,10 @@ exports.getAdminDashboard = async (req, res, next) => {
     `);
     const u = userStats.rows[0];
 
-    // Pending requests
+    // Pending requests & deposit requests
     const reqStats = await db.query(`SELECT COUNT(*) as pending FROM user_requests WHERE status = 'PENDING'`);
+    const depStats = await db.query(`SELECT COUNT(*) as pending FROM wallet_deposits WHERE status = 'PENDING'`);
+    const pendingRequestsTotal = parseInt(reqStats.rows[0].pending) + parseInt(depStats.rows[0].pending);
 
     // Ledger integrity
     const ledgerValid = blockchainAdapter.verifyLedgerIntegrity();
@@ -168,7 +170,7 @@ exports.getAdminDashboard = async (req, res, next) => {
       completed_settlements: parseInt(s.completed_settlements),
       active_prosumers: parseInt(u.active_prosumers),
       active_consumers: parseInt(u.active_consumers),
-      pending_requests: parseInt(reqStats.rows[0].pending),
+      pending_requests: pendingRequestsTotal,
       ledger_valid: ledgerValid,
       chart_daily: chartDaily,
       chart_hourly: chartHourly,

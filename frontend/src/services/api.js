@@ -43,6 +43,7 @@ export default {
   getProsumerDashboard: () => api.get('/dashboard/prosumer'),
   getConsumerDashboard: () => api.get('/dashboard/consumer'),
   getRegulatorDashboard: () => api.get('/dashboard/regulator'),
+  getUtilityDashboard: () => api.get('/dashboard/utility'),
 
   // Assets & Meters
   createAsset: (data) => api.post('/assets', data),
@@ -62,12 +63,15 @@ export default {
   lockTrade: (id) => api.post(`/trades/${id}/lock`),
   verifyDelivery: (id, data) => api.post(`/trades/${id}/delivery/verify`, data || {}),
   progressTrade: (id) => api.post(`/trades/${id}/progress`),
+  flagTrade: (id, data) => api.post(`/trades/${id}/flag`, data),
+
   
   // Wallet
   getWallet: () => api.get('/wallet'),
   requestDeposit: (data) => api.post('/wallet/deposit', data),
   getDeposits: () => api.get('/wallet/deposits'),
   approveDeposit: (id) => api.post(`/wallet/deposits/${id}/approve`),
+  rejectDeposit: (id, reason) => api.post(`/wallet/deposits/${id}/reject`, { reason }),
 
   // Admin & Platform Setup
   getZones: () => api.get('/zones'),

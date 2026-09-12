@@ -84,7 +84,7 @@ class MeterSimulator {
     const intervalScale = this.intervalMinutes / 5;
 
     let generationKwh = 0;
-    if (this.type === 'PROSUMER') {
+    if (this.type === 'PROSUMER' || this.type === 'BIDIRECTIONAL' || this.type === 'SOLAR') {
       const dayFactor = daylightFactor(hourFraction);
       const raw = this.capacityKw * dayFactor * this.scenario.generationMultiplier * intervalScale;
       generationKwh = round(Math.max(0, raw + randomNoise(0.05 * this.capacityKw * intervalScale)));

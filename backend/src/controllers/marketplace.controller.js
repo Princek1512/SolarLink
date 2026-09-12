@@ -35,7 +35,20 @@ exports.createListing = async (req, res, next) => {
     if (!quantity_kwh || quantity_kwh <= 0) return res.status(400).json({ error: 'Invalid quantity' });
 
     const userRes = await db.query('SELECT zone_id FROM users WHERE id = $1', [req.user.id]);
-    const zone_id = userRes.rows[0].zone_id;
+    const zone_id = userRes.rows[0]?.zone_id;
+
+    if (zone_id) {
+      const zCheck = await db.query('SELECT * FROM grid_zones WHERE id = $1', [zone_id]);
+      if (zCheck.rows.length > 0) {
+        const zObj = zCheck.rows[0];
+        if (zObj.throttled || zObj.curtailment_active || zObj.status === 'CONSTRAINED') {
+          return res.status(400).json({
+            error: 'TRADE_THROTTLED',
+            message: `Trade Throttled: Energy trading in Zone [${zObj.name || zone_id}] is currently restricted due to Utility Grid Curtailment.`
+          });
+        }
+      }
+    }
     
     if (req.user.role === 'prosumer') {
       const assetRes = await db.query('SELECT id FROM solar_assets WHERE user_id = $1', [req.user.id]);
@@ -188,7 +201,20 @@ exports.createOrder = async (req, res, next) => {
   try {
     const { quantity_kwh, max_price } = req.body;
     const userRes = await db.query('SELECT zone_id FROM users WHERE id = $1', [req.user.id]);
-    const zone_id = userRes.rows[0].zone_id;
+    const zone_id = userRes.rows[0]?.zone_id;
+    
+    if (zone_id) {
+      const zCheck = await db.query('SELECT * FROM grid_zones WHERE id = $1', [zone_id]);
+      if (zCheck.rows.length > 0) {
+        const zObj = zCheck.rows[0];
+        if (zObj.throttled || zObj.curtailment_active || zObj.status === 'CONSTRAINED') {
+          return res.status(400).json({
+            error: 'TRADE_THROTTLED',
+            message: `Trade Throttled: Energy trading in Zone [${zObj.name || zone_id}] is currently restricted due to Utility Grid Curtailment.`
+          });
+        }
+      }
+    }
     
     const result = await db.query(
       `INSERT INTO buy_orders (buyer_id, zone_id, quantity_kwh, max_price) 
@@ -235,6 +261,28 @@ exports.purchaseListing = async (req, res, next) => {
 
       if (quantityKwh > parseFloat(listing.remaining_kwh)) {
         throw new Error(`Requested quantity exceeds available energy (${listing.remaining_kwh} kWh left)`);
+      }
+
+      if (listing.zone_id) {
+        const zCheck = await client.query('SELECT * FROM grid_zones WHERE id = $1 FOR UPDATE', [listing.zone_id]);
+        if (zCheck.rows.length > 0) {
+          const zObj = zCheck.rows[0];
+          if (zObj.throttled || zObj.curtailment_active || zObj.status === 'CONSTRAINED') {
+            throw new Error(`Trade Throttled: Energy trading in Zone [${zObj.name || listing.zone_id}] is currently restricted due to Utility Grid Curtailment.`);
+          }
+
+          // Atomically update grid_zones current_load_kw and status in DB
+          const currentLoad = parseFloat(zObj.current_load_kw || 0);
+          const newLoad = parseFloat((currentLoad + quantityKwh).toFixed(2));
+          const capacity = parseFloat(zObj.capacity_kw || 500);
+          const thresh = parseFloat(zObj.congestion_threshold || capacity * 0.8);
+          const newStatus = newLoad >= capacity ? 'CONSTRAINED' : newLoad >= thresh ? 'ELEVATED' : zObj.status;
+
+          await client.query(
+            'UPDATE grid_zones SET current_load_kw = $1, status = $2 WHERE id = $3',
+            [newLoad, newStatus, listing.zone_id]
+          );
+        }
       }
 
       const agreedPrice = parseFloat(listing.asking_price);

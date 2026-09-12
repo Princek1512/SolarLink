@@ -178,6 +178,11 @@ a:hover {
   font-size: 0.775rem;
 }
 
+.btn-xs {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.725rem;
+}
+
 .btn-lg {
   padding: 0.75rem 1.85rem;
   font-size: 0.95rem;
@@ -192,6 +197,37 @@ a:hover {
 .btn-primary:hover {
   background-color: #6f4227;
   border-color: #6f4227;
+}
+
+.btn-warning {
+  background-color: #8c5638;
+  color: #ffffff;
+  border-color: #8c5638;
+}
+
+.btn-warning:hover {
+  background-color: #6f4227;
+  border-color: #6f4227;
+}
+
+.btn-danger {
+  background-color: #b91c1c;
+  color: #ffffff;
+  border-color: #991b1b;
+}
+
+.btn-danger:hover {
+  background-color: #991b1b;
+}
+
+.btn-success {
+  background-color: #15803d;
+  color: #ffffff;
+  border-color: #166534;
+}
+
+.btn-success:hover {
+  background-color: #166534;
 }
 
 .btn-gold {

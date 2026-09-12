@@ -45,26 +45,75 @@ exports.getZoneStatus = async (req, res, next) => {
 exports.updateZone = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status, capacity_kw, congestion_threshold } = req.body;
+    const { status, capacity_kw, congestion_threshold, throttled, curtailment_active } = req.body;
     
-    // We can also use CongestionEngine's setOverride if 'status' is CONSTRAINED/NORMAL etc.
+    // Ensure zone is configured in CongestionEngine before setting override
     if (status && ['NORMAL', 'ELEVATED', 'CONSTRAINED'].includes(status)) {
-      congestionEngine.setOverride(id, status);
+      try {
+        congestionEngine.getZoneConfig(id);
+      } catch (e) {
+        if (e.code === 'ZONE_NOT_CONFIGURED') {
+          const zoneRes = await db.query('SELECT * FROM grid_zones WHERE id = $1', [id]);
+          if (zoneRes.rows.length > 0) {
+            const z = zoneRes.rows[0];
+            const cap = parseFloat(z.capacity_kw || 500);
+            const thresh = Math.min(cap, parseFloat(z.congestion_threshold || cap * 0.8));
+            congestionEngine.configureZone(id, {
+              capacityKwh: cap,
+              thresholdKwh: thresh
+            });
+          }
+        }
+      }
+      try {
+        congestionEngine.setOverride(id, status);
+      } catch (e) {
+        console.warn('CongestionEngine override warning:', e.message);
+      }
     } else if (status === 'CLEAR') {
-      congestionEngine.clearOverride(id);
+      try {
+        congestionEngine.clearOverride(id);
+      } catch (e) {}
     }
     
-    const result = await db.query(
-      `UPDATE grid_zones SET 
-       status = COALESCE($1, status),
-       capacity_kw = COALESCE($2, capacity_kw),
-       congestion_threshold = COALESCE($3, congestion_threshold)
-       WHERE id = $4 RETURNING *`,
-      [status, capacity_kw, congestion_threshold, id]
-    );
+    const fields = [];
+    const params = [];
+    let idx = 1;
+
+    if (status !== undefined) {
+      fields.push(`status = $${idx++}`);
+      params.push(status);
+    }
+    if (capacity_kw !== undefined) {
+      fields.push(`capacity_kw = $${idx++}`);
+      params.push(capacity_kw);
+    }
+    if (congestion_threshold !== undefined) {
+      fields.push(`congestion_threshold = $${idx++}`);
+      params.push(congestion_threshold);
+    }
+    if (throttled !== undefined) {
+      fields.push(`throttled = $${idx++}`);
+      params.push(throttled);
+    }
+    if (curtailment_active !== undefined) {
+      fields.push(`curtailment_active = $${idx++}`);
+      params.push(curtailment_active);
+    }
+
+    if (fields.length === 0) {
+      const current = await db.query('SELECT * FROM grid_zones WHERE id = $1', [id]);
+      return res.json(current.rows[0]);
+    }
+
+    params.push(id);
+    const query = `UPDATE grid_zones SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
+    const result = await db.query(query, params);
     
     res.json(result.rows[0]);
   } catch (err) {
     next(err);
   }
 };
+
+

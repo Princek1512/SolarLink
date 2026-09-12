@@ -20,5 +20,6 @@ router.post('/:id/lock', verifyToken, requireRole(['admin', 'prosumer', 'consume
 router.post('/:id/delivery/verify', verifyToken, requireRole(['admin', 'meter_verifier', 'prosumer', 'consumer']), tradesController.verifyDelivery);
 router.post('/:id/progress', verifyToken, requireRole(['admin', 'prosumer', 'consumer']), tradesController.autoProgress);
 router.post('/:id/dispute', verifyToken, requireRole(['admin']), tradesController.disputeTrade);
+router.post('/:id/flag', verifyToken, requireRole(['admin', 'regulator']), tradesController.flagTrade);
 
 module.exports = router;

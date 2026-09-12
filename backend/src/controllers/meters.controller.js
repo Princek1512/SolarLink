@@ -16,8 +16,24 @@ exports.simulateReading = async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    // Trigger simulator
-    const reading = await simulatorManager.tickOnce(asset.id, new Date());
+    // Ensure meter is registered in simulator
+    let meterSimulator;
+    try {
+      meterSimulator = simulatorManager.getMeter(asset.id);
+    } catch (e) {
+      meterSimulator = simulatorManager.registerMeter({
+        assetId: asset.id,
+        zoneId: asset.zone_id || req.user.zone_id || 'ZONE-1',
+        type: (meter.meter_type === 'CONSUMER' ? 'CONSUMER' : 'PROSUMER'),
+        capacityKw: parseFloat(asset.capacity_kw) || 5,
+        hasBattery: asset.battery_enabled
+      });
+    }
+    
+    // Simulate reading at peak solar daylight hour (1:00 PM) so manual IoT simulation produces positive generation
+    const simDate = new Date();
+    simDate.setHours(13, 0, 0, 0);
+    const reading = await simulatorManager.tickOnce(asset.id, simDate);
     
     // Persist reading
     const result = await db.query(
