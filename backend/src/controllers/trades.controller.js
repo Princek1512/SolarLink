@@ -25,12 +25,34 @@ exports.getTrades = async (req, res, next) => {
 exports.getTrade = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await db.query('SELECT * FROM trades WHERE id = $1', [id]);
+    const result = await db.query(`
+      SELECT t.*,
+             s.id as settlement_id, s.gross_amount, s.platform_fee, s.grid_fee, s.refund_amount,
+             s.seller_credit, s.buyer_debit, s.status as settlement_status, s.settled_at
+      FROM trades t
+      LEFT JOIN settlements s ON s.trade_id = t.id
+      WHERE t.id = $1
+    `, [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Trade not found' });
     
-    const trade = result.rows[0];
-    if (req.user.role === 'prosumer' && trade.seller_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
-    if (req.user.role === 'consumer' && trade.buyer_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    const row = result.rows[0];
+    if (req.user.role === 'prosumer' && row.seller_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (req.user.role === 'consumer' && row.buyer_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    
+    const trade = { ...row };
+    if (row.settlement_id) {
+      trade.settlement = {
+        id: row.settlement_id,
+        gross_amount: row.gross_amount,
+        platform_fee: row.platform_fee,
+        grid_fee: row.grid_fee,
+        refund_amount: row.refund_amount,
+        seller_credit: row.seller_credit,
+        buyer_debit: row.buyer_debit,
+        status: row.settlement_status,
+        settled_at: row.settled_at
+      };
+    }
     
     res.json(trade);
   } catch (err) {
@@ -175,9 +197,15 @@ exports.verifyDelivery = async (req, res, next) => {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [id, settlement.gross, settlement.fees.platformFee, settlement.fees.gridFee, settlement.refund, walletUpdate.prosumerCredit, walletUpdate.consumerDebit, 'SETTLED', trade.settlement?.settledAt || new Date()]);
 
-        // Apply wallet updates
+        // Lock prosumer wallet and credit prosumer balance
+        await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [walletUpdate.prosumerId]);
         await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [walletUpdate.prosumerCredit, walletUpdate.prosumerId]);
-        await client.query(`UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`, [walletUpdate.consumerDebit, walletUpdate.consumerId]);
+
+        // If there is a shortfall refund, credit consumer balance
+        if (settlement.refund > 0) {
+          await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [walletUpdate.consumerId]);
+          await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [settlement.refund, walletUpdate.consumerId]);
+        }
       }
 
       // If disputed, insert dispute
@@ -238,8 +266,14 @@ exports.autoProgress = async (req, res, next) => {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [id, settlement.gross, settlement.fees.platformFee, settlement.fees.gridFee, settlement.refund, walletUpdate.prosumerCredit, walletUpdate.consumerDebit, 'SETTLED', trade.settlement?.settledAt || new Date()]);
 
+        // Lock prosumer wallet and credit prosumer balance
+        await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [walletUpdate.prosumerId]);
         await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [walletUpdate.prosumerCredit, walletUpdate.prosumerId]);
-        await client.query(`UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`, [walletUpdate.consumerDebit, walletUpdate.consumerId]);
+
+        if (settlement.refund > 0) {
+          await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [walletUpdate.consumerId]);
+          await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [settlement.refund, walletUpdate.consumerId]);
+        }
       }
 
       await client.query('COMMIT');

@@ -1,8 +1,23 @@
 import React from 'react';
-import { DollarSign, Percent, ShieldCheck } from 'lucide-react';
+import { DollarSign, Percent, ShieldCheck, Clock } from 'lucide-react';
 
 export default function SettlementCard({ settlement }) {
-  if (!settlement) return <div className="card">Settlement pending...</div>;
+  if (!settlement) {
+    return (
+      <div className="card">
+        <div className="flex items-center gap-2 mb-3">
+          <Clock size={20} color="var(--color-primary)" />
+          <h3 style={{ margin: 0 }}>Settlement Status</h3>
+        </div>
+        <div className="p-4 rounded text-center" style={{ background: 'var(--color-bg)', border: '1px border var(--color-border)' }}>
+          <p className="text-sm font-bold text-muted mb-1">Settlement Pending Delivery Verification</p>
+          <p className="text-xs text-muted" style={{ margin: 0 }}>
+            Financial transfers and fee calculations will be finalized once energy delivery is verified by smart meters.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const isRefunded = Number(settlement.refund_amount) > 0;
 

@@ -162,13 +162,10 @@ export default function AdminTrades() {
                           </button>
                         )}
                         {(t.status === 'MATCHED' || t.status === 'LOCKED') && (
-                          <button className="btn btn-sm btn-outline" onClick={() => handleVerifyDelivery(t.id, t.quantity_kwh)}>
+                          <button className="btn btn-sm btn-primary" onClick={() => handleVerifyDelivery(t.id, t.quantity_kwh)}>
                             ⚡ Record Delivery & Verify
                           </button>
                         )}
-                        <button className="btn btn-sm btn-primary" onClick={() => handleAutoProgress(t.id)}>
-                          🚀 Complete Full Settlement Flow
-                        </button>
                       </div>
                     </div>
                   )}

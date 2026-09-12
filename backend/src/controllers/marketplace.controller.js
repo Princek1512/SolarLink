@@ -219,7 +219,14 @@ exports.purchaseListing = async (req, res, next) => {
     try {
       await client.query('BEGIN');
 
-      // 1. Lock the listing atomically
+      // 1. Lock consumer wallet and check sufficient balance (ACID compliance)
+      const walletRes = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [consumerId]);
+      if (walletRes.rows.length === 0) {
+        throw new Error('Consumer wallet not found');
+      }
+      const consumerBalance = parseFloat(walletRes.rows[0].balance);
+
+      // 2. Lock the listing atomically
       const listingRes = await client.query('SELECT * FROM energy_listings WHERE id = $1 AND status = $2 FOR UPDATE', [id, 'ACTIVE']);
       if (listingRes.rows.length === 0) {
         throw new Error('Listing not found or no longer active');
@@ -228,6 +235,13 @@ exports.purchaseListing = async (req, res, next) => {
 
       if (quantityKwh > parseFloat(listing.remaining_kwh)) {
         throw new Error(`Requested quantity exceeds available energy (${listing.remaining_kwh} kWh left)`);
+      }
+
+      const agreedPrice = parseFloat(listing.asking_price);
+      const totalCost = parseFloat((quantityKwh * agreedPrice).toFixed(4));
+
+      if (consumerBalance < totalCost) {
+        throw new Error(`Insufficient wallet balance. Required: $${totalCost.toFixed(2)}, Available: $${consumerBalance.toFixed(2)}`);
       }
 
       // Check congestion limits
@@ -253,15 +267,16 @@ exports.purchaseListing = async (req, res, next) => {
         throw new Error('Trade rejected by Congestion Engine due to grid limits');
       }
 
-      const agreedPrice = parseFloat(listing.asking_price);
+      // 3. Deduct total cost from Consumer wallet atomically
+      await client.query('UPDATE wallets SET balance = balance - $1 WHERE user_id = $2', [totalCost, consumerId]);
 
-      // 2. Reduce listing quantity
+      // 4. Reduce listing quantity
       const newRemaining = parseFloat(listing.remaining_kwh) - quantityKwh;
       const newStatus = newRemaining <= 0 ? 'SOLD' : 'ACTIVE';
       
       await client.query(`UPDATE energy_listings SET remaining_kwh = $1, status = $2 WHERE id = $3`, [newRemaining, newStatus, listing.id]);
 
-      // 3. Create Trade via blockchain
+      // 5. Create Trade via blockchain
       const { blockchainAdapter, loadTracker, ROLES } = require('../services/engine.service');
       const tradeId = require('uuid').v4();
       
@@ -274,13 +289,13 @@ exports.purchaseListing = async (req, res, next) => {
         agreedPrice
       }, ROLES.TRADING_ENGINE);
 
-      // 4. Persist Trade to DB
+      // 6. Persist Trade to DB
       await client.query(`
         INSERT INTO trades (id, listing_id, seller_id, buyer_id, zone_id, quantity_kwh, agreed_price, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [trade.tradeId, listing.id, trade.seller, trade.buyer, trade.zoneId, trade.quantityKwh, trade.agreedPrice, trade.status]);
 
-      // 5. Persist Trade Event
+      // 7. Persist Trade Event
       await client.query(`
         INSERT INTO trade_events (trade_id, event_type, event_data, previous_hash, event_hash)
         VALUES ($1, $2, $3, $4, $5)
@@ -289,7 +304,7 @@ exports.purchaseListing = async (req, res, next) => {
       loadTracker.sync(trade);
 
       await client.query('COMMIT');
-      auditService.log(consumerId, req.user.role, 'ENERGY_PURCHASED', 'trade', trade.tradeId, 'MATCHED', { listing_id: id, quantity_kwh: quantityKwh, agreed_price: agreedPrice, seller_id: listing.seller_id }, req.ip);
+      auditService.log(consumerId, req.user.role, 'ENERGY_PURCHASED', 'trade', trade.tradeId, 'MATCHED', { listing_id: id, quantity_kwh: quantityKwh, agreed_price: agreedPrice, total_cost: totalCost, seller_id: listing.seller_id }, req.ip);
       res.status(201).json(trade);
     } catch (err) {
       await client.query('ROLLBACK');
