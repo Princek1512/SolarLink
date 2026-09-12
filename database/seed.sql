@@ -8,10 +8,10 @@ INSERT INTO grid_zones (id, name, capacity_kw, current_load_kw, congestion_thres
 -- 2. users
 -- Password hash for 'password123' (bcrypt hash)
 INSERT INTO users (id, name, email, password_hash, role, zone_id, status) VALUES
-('11111111-1111-1111-1111-111111111111', 'Admin User', 'admin@solarlink.com', '$2b$10$EP/7p3b14/8Lh.l/T1tKvuK6sV3.D2kR9DkU3vVjFhR8w22U8d/D.', 'admin', NULL, 'ACTIVE'),
-('22222222-2222-2222-2222-222222222222', 'Alice Prosumer', 'alice@example.com', '$2b$10$EP/7p3b14/8Lh.l/T1tKvuK6sV3.D2kR9DkU3vVjFhR8w22U8d/D.', 'prosumer', 'ZONE-1', 'ACTIVE'),
-('33333333-3333-3333-3333-333333333333', 'Bob Consumer', 'bob@example.com', '$2b$10$EP/7p3b14/8Lh.l/T1tKvuK6sV3.D2kR9DkU3vVjFhR8w22U8d/D.', 'consumer', 'ZONE-1', 'ACTIVE'),
-('44444444-4444-4444-4444-444444444444', 'Charlie Prosumer', 'charlie@example.com', '$2b$10$EP/7p3b14/8Lh.l/T1tKvuK6sV3.D2kR9DkU3vVjFhR8w22U8d/D.', 'prosumer', 'ZONE-2', 'ACTIVE');
+('11111111-1111-1111-1111-111111111111', 'Admin User', 'admin@solarlink.com', '$2b$10$.UtY9ugCMB7E.cOaE9nMRObQQ6KGCGSXR92B7eQt99puBcwj.V9x2', 'admin', NULL, 'ACTIVE'),
+('22222222-2222-2222-2222-222222222222', 'Alice Prosumer', 'alice@example.com', '$2b$10$.UtY9ugCMB7E.cOaE9nMRObQQ6KGCGSXR92B7eQt99puBcwj.V9x2', 'prosumer', 'ZONE-1', 'ACTIVE'),
+('33333333-3333-3333-3333-333333333333', 'Bob Consumer', 'bob@example.com', '$2b$10$.UtY9ugCMB7E.cOaE9nMRObQQ6KGCGSXR92B7eQt99puBcwj.V9x2', 'consumer', 'ZONE-1', 'ACTIVE'),
+('44444444-4444-4444-4444-444444444444', 'Charlie Prosumer', 'charlie@example.com', '$2b$10$.UtY9ugCMB7E.cOaE9nMRObQQ6KGCGSXR92B7eQt99puBcwj.V9x2', 'prosumer', 'ZONE-2', 'ACTIVE');
 
 -- 3. wallets
 INSERT INTO wallets (user_id, balance) VALUES
