@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sun, LogIn, UserPlus, Clock } from 'lucide-react';
+import { Sun, LogIn, UserPlus, Clock, XCircle } from 'lucide-react';
 import api from '../services/api';
 
 export default function Login() {
@@ -51,11 +51,26 @@ export default function Login() {
     }
   };
 
+  const isRejected = error && error.toLowerCase().includes('reject');
+  const isPending = error && error.toLowerCase().includes('pending');
+
   return (
     <div className="flex justify-center items-center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f0eb 0%, #eae4dd 100%)' }}>
-      <div className="card shadow-lg p-8" style={{ width: '100%', maxWidth: '420px' }}>
+      <div className="card shadow-lg p-8" style={{ width: '100%', maxWidth: '420px', borderRadius: '8px' }}>
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 shadow-md" style={{ background: 'linear-gradient(135deg, #1c1917 0%, #8c5638 100%)' }}>
+          <div 
+            style={{ 
+              width: '48px', 
+              height: '48px', 
+              borderRadius: '12px', 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              margin: '0 auto 12px', 
+              background: 'linear-gradient(135deg, #1c1917 0%, #8c5638 100%)',
+              boxShadow: '0 4px 12px rgba(140, 86, 56, 0.25)'
+            }}
+          >
             <Sun size={26} color="#ffffff" />
           </div>
           <h2 className="m-0 font-extrabold text-2xl text-slate-900">SolarLink</h2>
@@ -63,17 +78,36 @@ export default function Login() {
         </div>
 
         {infoMessage && (
-          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold text-center mb-4 flex items-center gap-2">
-            <Clock size={16} className="shrink-0 text-amber-600" />
-            <span>{infoMessage}</span>
+          <div className="pending-box">
+            <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--color-primary)', fontWeight: 700, fontSize: '0.85rem' }}>
+              <Clock size={16} />
+              <span>Request Submitted</span>
+            </div>
+            <p className="text-xs text-muted mb-0">{infoMessage}</p>
           </div>
         )}
 
-        {error && (
-          <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold text-center mb-4">
+        {isRejected ? (
+          <div className="rejection-box">
+            <div className="flex items-center gap-2 mb-1" style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.85rem' }}>
+              <XCircle size={18} />
+              <span>Registration Request Rejected</span>
+            </div>
+            <p className="text-xs text-muted mb-0">{error}</p>
+          </div>
+        ) : isPending ? (
+          <div className="pending-box">
+            <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--color-primary)', fontWeight: 700, fontSize: '0.85rem' }}>
+              <Clock size={18} />
+              <span>Approval Pending</span>
+            </div>
+            <p className="text-xs text-muted mb-0">{error}</p>
+          </div>
+        ) : error ? (
+          <div className="error-box">
             {error}
           </div>
-        )}
+        ) : null}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {isRegister && (

@@ -1,7 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { toast } from '../utils/toast';
-import { Activity, Zap, BarChart3, Users, AlertCircle, CheckCircle, XCircle, Clock, TrendingUp, DollarSign } from 'lucide-react';
+import { Activity, Zap, BarChart3, Users, AlertCircle, CheckCircle, XCircle, Clock, TrendingUp, DollarSign, ShieldAlert, Sun, ArrowUpRight } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from 'recharts';
 
 function KpiCard({ title, value, sub, icon: Icon, color = 'var(--color-primary)' }) {
   return (
@@ -20,32 +37,16 @@ function KpiCard({ title, value, sub, icon: Icon, color = 'var(--color-primary)'
   );
 }
 
-function BarChart({ data, xKey, yKey, color = '#1D3557', height = 110 }) {
-  if (!data || data.length === 0) return <div className="text-muted text-sm text-center p-6">No historical data available</div>;
-  const max = Math.max(...data.map(d => parseFloat(d[yKey]) || 0), 1);
-  const barW = Math.max(6, Math.floor(300 / data.length) - 3);
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <svg width={Math.max(300, data.length * (barW + 3))} height={height + 25} style={{ display: 'block', margin: '0 auto' }}>
-        {data.map((d, i) => {
-          const h = Math.max(3, ((parseFloat(d[yKey]) || 0) / max) * height);
-          return (
-            <g key={i}>
-              <rect x={i * (barW + 3)} y={height - h} width={barW} height={h} fill={color} rx={2} opacity={0.95}>
-                <title>{`${d[xKey]}: ${d[yKey]}`}</title>
-              </rect>
-            </g>
-          );
-        })}
-        <line x1={0} y1={height} x2={data.length * (barW + 3)} y2={height} stroke="var(--color-border)" strokeWidth={1} />
-      </svg>
-      <div className="flex justify-between text-xs text-muted mt-2 font-mono">
-        {data.length > 0 && <span>{new Date(data[0][xKey]).toLocaleDateString()}</span>}
-        {data.length > 1 && <span>{new Date(data[data.length - 1][xKey]).toLocaleDateString()}</span>}
-      </div>
-    </div>
-  );
-}
+const STATUS_COLORS = {
+  SETTLED: '#15803d',
+  VERIFIED: '#16a34a',
+  MATCHED: '#8c5638',
+  LOCKED: '#1D3557',
+  DELIVERED: '#4b5563',
+  DISPUTED: '#d97706',
+  CANCELLED: '#dc2626',
+  PENDING: '#8c5638'
+};
 
 export default function AdminDashboard() {
   const [data, setData] = useState(null);
@@ -61,11 +62,11 @@ export default function AdminDashboard() {
   if (loading) return <div className="card text-center p-12 text-muted">Loading executive analytics…</div>;
   if (!data) return <div className="card text-center p-12 text-muted">Failed to load data.</div>;
 
-  const statusColors = {
-    SETTLED: 'var(--color-success)', CANCELLED: 'var(--color-danger)',
-    DISPUTED: 'var(--color-warning)', MATCHED: 'var(--color-primary-accent)', LOCKED: '#1D3557',
-    DELIVERED: '#4b5563', VERIFIED: 'var(--color-success)'
-  };
+  const pieData = (data.chart_status || []).map(s => ({
+    name: s.status,
+    value: parseInt(s.count),
+    color: STATUS_COLORS[s.status] || '#8c5638'
+  }));
 
   return (
     <div>
@@ -121,46 +122,177 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Analytics Charts */}
+      {/* Interactive Analytics Charts */}
+      <h2 className="text-xs font-bold text-muted uppercase tracking-wider mb-3">Marketplace Analytics & Insights</h2>
       <div className="grid grid-cols-2 gap-6 mb-8">
+        
+        {/* Chart 1: 14-Day Energy Trading Volume */}
         <div className="card">
-          <h3 className="mb-4">Trades Volume (Last 30 Days)</h3>
-          <BarChart data={data.chart_daily} xKey="day" yKey="count" color="#1D3557" />
-        </div>
-        <div className="card">
-          <h3 className="mb-4">Energy Volume Traded (kWh)</h3>
-          <BarChart data={data.chart_daily} xKey="day" yKey="kwh" color="#1D3557" />
-        </div>
-        <div className="card">
-          <h3 className="mb-4">Average Rate Trend ($/kWh)</h3>
-          <BarChart data={data.chart_daily} xKey="day" yKey="avg_rate" color="#1D3557" />
-        </div>
-        <div className="card">
-          <h3 className="mb-4">Trade Lifecycle Distribution</h3>
-          {data.chart_status.length === 0 ? (
-            <div className="text-muted text-sm text-center p-6">No trades recorded yet</div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {data.chart_status.map(s => (
-                <div key={s.status} className="flex items-center gap-3">
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: statusColors[s.status] || '#aaa', flexShrink: 0 }} />
-                  <div className="text-sm font-semibold" style={{ minWidth: 90 }}>{s.status}</div>
-                  <div className="flex-1" style={{ height: 8, background: '#eef2f5', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.max(4, (parseInt(s.count) / data.total_trades) * 100)}%`, height: '100%', background: statusColors[s.status] || '#aaa', borderRadius: 2 }} />
-                  </div>
-                  <div className="text-xs font-bold text-muted font-mono" style={{ minWidth: 35, textAlign: 'right' }}>{s.count}</div>
-                </div>
-              ))}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="m-0 text-base">Energy Trading Volume Trend (kWh)</h3>
+              <span className="text-xs text-muted">Daily total energy exchanged across microgrid zones</span>
             </div>
-          )}
+            <div className="text-xs font-bold px-2.5 py-1 rounded bg-slate-100 font-mono" style={{ color: '#1D3557' }}>
+              14-Day Timeline
+            </div>
+          </div>
+          <div style={{ width: '100%', height: 240 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data.chart_daily} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#1D3557" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#1D3557" stopOpacity={0.02}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2dcd5" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#78716c' }} axisLine={{ stroke: '#e2dcd5' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} />
+                <Tooltip 
+                  formatter={(val, name) => [name === 'kwh' ? `${val} kWh` : `$${val}`, name === 'kwh' ? 'Energy Traded' : 'Total Value']}
+                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e2dcd5', fontSize: '12px' }}
+                />
+                <Area type="monotone" dataKey="kwh" stroke="#1D3557" strokeWidth={2.5} fillOpacity={1} fill="url(#colorKwh)" name="kwh" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
+
+        {/* Chart 2: P2P Solar Rate vs Utility Grid Rates */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="m-0 text-base">Tariff Comparison ($/kWh)</h3>
+              <span className="text-xs text-muted">P2P Solar Rate vs Utility Retail & Feed-in Rates</span>
+            </div>
+            <span className="badge badge-success">Save ~35% vs Grid</span>
+          </div>
+          <div style={{ width: '100%', height: 240 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data.chart_daily} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2dcd5" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#78716c' }} axisLine={{ stroke: '#e2dcd5' }} />
+                <YAxis domain={[0.05, 0.25]} tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} />
+                <Tooltip 
+                  formatter={(val) => [`$${Number(val).toFixed(4)}/kWh`]}
+                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e2dcd5', fontSize: '12px' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                <Line type="monotone" dataKey="grid_retail_rate" name="Utility Grid Retail ($0.22)" stroke="#8c5638" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+                <Line type="monotone" dataKey="p2p_rate" name="P2P Solar Agreed Rate" stroke="#1D3557" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="feed_in_rate" name="Utility Buyback Tariff ($0.08)" stroke="#15803d" strokeWidth={2} strokeDasharray="2 2" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 3: 24-Hour Solar Generation vs Load Demand Curve */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="m-0 text-base">24-Hour Generation vs Demand Curve</h3>
+              <span className="text-xs text-muted">Solar peak output vs microgrid consumer demand</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              <Sun size={13} /> Peak 10am - 3pm
+            </div>
+          </div>
+          <div style={{ width: '100%', height: 240 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data.chart_hourly} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorSolar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.02}/>
+                  </linearGradient>
+                  <linearGradient id="colorDemand" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#1D3557" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#1D3557" stopOpacity={0.02}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2dcd5" />
+                <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#78716c' }} axisLine={{ stroke: '#e2dcd5' }} interval={2} />
+                <YAxis tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} unit=" kW" />
+                <Tooltip 
+                  formatter={(val) => [`${val} kW`]}
+                  contentStyle={{ backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e2dcd5', fontSize: '12px' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                <Area type="monotone" dataKey="solar_generation_kw" name="Solar Power Generation (kW)" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorSolar)" />
+                <Area type="monotone" dataKey="grid_demand_kw" name="Consumer Energy Demand (kW)" stroke="#1D3557" strokeWidth={2} fillOpacity={1} fill="url(#colorDemand)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 4: Trade Status Lifecycle & Health Breakdown */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="m-0 text-base">Trade Lifecycle Health</h3>
+              <span className="text-xs text-muted">Status distribution & settlement completion</span>
+            </div>
+            <span className="badge badge-neutral">{data.total_trades} Trades</span>
+          </div>
+          
+          <div className="flex items-center gap-4" style={{ height: 240 }}>
+            {/* Pie Chart */}
+            <div style={{ width: '45%', height: '100%' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData.length > 0 ? pieData : [{ name: 'Settled', value: 1, color: '#15803d' }]}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {(pieData.length > 0 ? pieData : [{ name: 'Settled', value: 1, color: '#15803d' }]).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    formatter={(val, name) => [`${val} trades`, name]}
+                    contentStyle={{ backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e2dcd5', fontSize: '12px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Progress Legend */}
+            <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto pr-1" style={{ maxHeight: '220px' }}>
+              {(data.chart_status || []).map(s => {
+                const color = STATUS_COLORS[s.status] || '#8c5638';
+                const pct = data.total_trades > 0 ? ((parseInt(s.count) / data.total_trades) * 100).toFixed(0) : 100;
+                return (
+                  <div key={s.status} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                        <span>{s.status}</span>
+                      </div>
+                      <span className="font-mono text-muted">{s.count} ({pct}%)</span>
+                    </div>
+                    <div style={{ height: 6, width: '100%', background: '#eae4dd', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(6, pct)}%`, height: '100%', background: color, borderRadius: 3 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* Zone Breakdown Table */}
       {data.chart_zones.length > 0 && (
         <div className="table-responsive">
           <div className="p-4 bg-white border-b flex items-center justify-between">
-            <h3 className="m-0 text-base">Top Trading Grid Zones</h3>
+            <h3 className="m-0 text-base">Top Trading Grid Zones & Network Capacity</h3>
           </div>
           <table>
             <thead>
@@ -211,3 +343,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
