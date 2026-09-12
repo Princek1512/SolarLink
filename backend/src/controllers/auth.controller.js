@@ -13,7 +13,7 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
-    if (!['prosumer', 'consumer'].includes(role)) {
+    if (!['prosumer', 'consumer', 'utility', 'regulator'].includes(role)) {
       return res.status(403).json({ error: 'Invalid role for public registration' });
     }
 

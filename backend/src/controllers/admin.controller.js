@@ -237,12 +237,13 @@ exports.rejectRequest = async (req, res, next) => {
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 exports.getAuditLogs = async (req, res, next) => {
   try {
-    const { event_type, actor_role, entity_type, from, to, search, page = 1, limit = 50 } = req.query;
+    const { event_type, exclude_type, actor_role, entity_type, from, to, search, page = 1, limit = 50 } = req.query;
     const params = [];
     const conditions = [];
     let idx = 1;
 
     if (event_type) { conditions.push(`al.event_type = $${idx++}`); params.push(event_type); }
+    if (exclude_type) { conditions.push(`al.event_type != $${idx++}`); params.push(exclude_type); }
     if (actor_role) { conditions.push(`al.actor_role = $${idx++}`); params.push(actor_role); }
     if (entity_type) { conditions.push(`al.entity_type = $${idx++}`); params.push(entity_type); }
     if (from) { conditions.push(`al.created_at >= $${idx++}`); params.push(from); }

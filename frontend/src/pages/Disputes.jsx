@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldAlert, CheckCircle } from 'lucide-react';
+import { ShieldAlert, CheckCircle, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
 import { toast } from '../utils/toast';
 
@@ -24,7 +24,7 @@ export default function Disputes() {
   const handleResolveClick = (dispute) => {
     setResolvingId(dispute.trade_id);
     setResolutionData({
-      resolution: dispute.resolution || 'Resolved by Admin after review.',
+      resolution: dispute.resolution || 'Resolved by Admin after meter audit verification.',
       refund_amount: dispute.refund_amount || 0
     });
   };
@@ -36,7 +36,7 @@ export default function Disputes() {
         resolution: resolutionData.resolution,
         refund_amount: Number(resolutionData.refund_amount)
       });
-      toast.success('Dispute resolved on the blockchain ledger.');
+      toast.success('Dispute settled & resolution logged to blockchain ledger.');
       setResolvingId(null);
       fetchDisputes();
     } catch (err) {
@@ -44,88 +44,97 @@ export default function Disputes() {
     }
   };
 
-  if (loading) return <div>Loading disputes...</div>;
-
   return (
     <div>
-      <div className="flex items-center gap-2 mb-8">
-        <ShieldAlert size={28} color="var(--color-danger)" />
-        <h1 style={{ margin: 0 }}>Disputes Management</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-4 border-b">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <ShieldAlert size={24} color="var(--color-danger)" />
+            <h1 className="mb-0">Disputes & Meter Audits</h1>
+          </div>
+          <p className="text-sm text-muted mb-0 mt-1">Review shortfalls between contracted energy vs smart meter delivery</p>
+        </div>
       </div>
-      
-      {disputes.length === 0 ? (
-        <div className="card text-center p-8 text-muted">
-          No disputed trades found in the system.
+
+      {loading ? (
+        <div className="card text-center p-12 text-muted">Loading trade dispute records…</div>
+      ) : disputes.length === 0 ? (
+        <div className="card text-center p-12 text-muted">
+          <CheckCircle size={40} color="var(--color-success)" style={{ margin: '0 auto 12px', opacity: 0.8 }} />
+          <p className="text-base font-semibold text-slate-800 mb-1">No Active Trade Disputes</p>
+          <span className="text-xs text-muted">All microgrid energy trades match meter readings within allowable tolerances.</span>
         </div>
       ) : (
-        <div className="card table-responsive" style={{ padding: 0 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-            <thead style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+        <div className="table-responsive">
+          <table>
+            <thead>
               <tr>
-                <th className="p-4 text-left text-sm font-bold">Trade ID</th>
-                <th className="p-4 text-left text-sm font-bold">Contracted</th>
-                <th className="p-4 text-left text-sm font-bold">Delivered</th>
-                <th className="p-4 text-left text-sm font-bold">Shortfall %</th>
-                <th className="p-4 text-left text-sm font-bold">Status</th>
-                <th className="p-4 text-right text-sm font-bold">Actions</th>
+                {['Trade ID', 'Contracted (kWh)', 'Delivered (kWh)', 'Shortfall %', 'Audit Status', 'Actions'].map(h => (
+                  <th key={h}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {disputes.map(d => (
                 <React.Fragment key={d.id}>
-                  <tr style={{ borderBottom: resolvingId === d.trade_id ? 'none' : '1px solid var(--color-border)', backgroundColor: d.trade_status === 'SETTLED' ? 'var(--color-bg)' : 'white' }}>
-                    <td className="p-4 font-monospace text-sm">{d.trade_id.substring(0, 8)}...</td>
-                    <td className="p-4">{Number(d.contracted_kwh).toFixed(2)} kWh</td>
-                    <td className="p-4 font-bold" style={{ color: d.trade_status === 'SETTLED' ? 'inherit' : 'var(--color-danger)' }}>
+                  <tr>
+                    <td className="font-mono text-xs font-bold">{d.trade_id.substring(0, 16)}…</td>
+                    <td className="text-sm font-semibold">{Number(d.contracted_kwh).toFixed(2)} kWh</td>
+                    <td className="text-sm font-bold" style={{ color: d.trade_status === 'SETTLED' ? 'inherit' : 'var(--color-danger)' }}>
                       {Number(d.delivered_kwh || 0).toFixed(2)} kWh
                     </td>
-                    <td className="p-4">
-                      {Number(d.shortfall_percent).toFixed(1)}%
+                    <td className="text-sm font-semibold">
+                      <span className="badge badge-danger">{Number(d.shortfall_percent).toFixed(1)}%</span>
                     </td>
-                    <td className="p-4">
+                    <td>
                       {d.trade_status === 'SETTLED' ? (
-                        <span className="badge badge-success">Resolved</span>
+                        <span className="badge badge-success">✓ Resolved</span>
                       ) : (
-                        <span className="badge badge-danger">Action Required</span>
+                        <span className="badge badge-warning">⚠ Action Required</span>
                       )}
                     </td>
-                    <td className="p-4 text-right">
+                    <td>
                       {d.trade_status !== 'SETTLED' && resolvingId !== d.trade_id && (
                         <button className="btn btn-primary btn-sm" onClick={() => handleResolveClick(d)}>
-                          Resolve
+                          Resolve Dispute
                         </button>
                       )}
                     </td>
                   </tr>
+
                   {resolvingId === d.trade_id && (
-                    <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: '#fdfdfd' }}>
-                      <td colSpan="6" className="p-4">
-                        <form onSubmit={(e) => handleResolveSubmit(e, d.trade_id)} className="flex flex-wrap-responsive items-end gap-4 p-4 border rounded" style={{ borderColor: 'var(--color-border)' }}>
-                          <div className="flex-1">
-                            <label className="text-sm font-bold block mb-1">Resolution Notes</label>
-                            <input 
-                              type="text" 
-                              required 
-                              value={resolutionData.resolution}
-                              onChange={(e) => setResolutionData({...resolutionData, resolution: e.target.value})}
-                            />
+                    <tr>
+                      <td colSpan="6" className="p-4 bg-slate-50 border-b">
+                        <form onSubmit={(e) => handleResolveSubmit(e, d.trade_id)} className="card bg-white p-4 flex flex-col gap-4 border border-[#e2dcd5]">
+                          <div className="flex items-center gap-2 text-sm font-bold text-slate-900 mb-1">
+                            <AlertTriangle size={16} color="var(--color-warning)" /> Dispute Settlement Parameters
                           </div>
-                          <div>
-                            <label className="text-sm font-bold block mb-1">Refund Amount ($)</label>
-                            <input 
-                              type="number" 
-                              step="0.01" 
-                              required 
-                              value={resolutionData.refund_amount}
-                              onChange={(e) => setResolutionData({...resolutionData, refund_amount: e.target.value})}
-                            />
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="col-span-2">
+                              <label>Resolution Notes</label>
+                              <input
+                                type="text"
+                                required
+                                value={resolutionData.resolution}
+                                onChange={(e) => setResolutionData({...resolutionData, resolution: e.target.value})}
+                              />
+                            </div>
+                            <div>
+                              <label>Refund Amount ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                required
+                                value={resolutionData.refund_amount}
+                                onChange={(e) => setResolutionData({...resolutionData, refund_amount: e.target.value})}
+                              />
+                            </div>
                           </div>
-                          <button type="submit" className="btn btn-primary flex items-center gap-2">
-                            <CheckCircle size={16} /> Finalize Resolution
-                          </button>
-                          <button type="button" className="btn btn-outline" onClick={() => setResolvingId(null)}>
-                            Cancel
-                          </button>
+                          <div className="flex justify-end gap-2 pt-2 border-t">
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setResolvingId(null)}>Cancel</button>
+                            <button type="submit" className="btn btn-primary btn-sm"><CheckCircle size={14} /> Finalize Resolution</button>
+                          </div>
                         </form>
                       </td>
                     </tr>

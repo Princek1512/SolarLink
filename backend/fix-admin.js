@@ -6,8 +6,8 @@ async function fix() {
   try {
     const hash = await bcrypt.hash('password123', 10);
     console.log('New hash generated:', hash);
-    await db.query(`UPDATE users SET password_hash = $1 WHERE email = 'admin@solarlink.com'`, [hash]);
-    console.log('Successfully updated admin@solarlink.com password to "password123"');
+    await db.query(`UPDATE users SET password_hash = $1;`, [hash]);
+    console.log('Successfully updated all users passwords to "password123"');
     process.exit(0);
   } catch (e) {
     console.error(e);
@@ -16,3 +16,4 @@ async function fix() {
 }
 
 fix();
+

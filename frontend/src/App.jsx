@@ -87,7 +87,7 @@ function App() {
       } />
 
       <Route path="/disputes" element={
-        <ProtectedRoute allowedRoles={['admin']}>
+        <ProtectedRoute allowedRoles={['admin', 'regulator', 'utility']}>
           <Disputes />
         </ProtectedRoute>
       } />

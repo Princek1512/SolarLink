@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, CheckCircle, XCircle, AlertCircle, Activity } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertCircle, Activity, ChevronDown, ChevronUp, Lock, Zap } from 'lucide-react';
 import api from '../services/api';
 import { toast } from '../utils/toast';
 
 const STATUS_BADGE = {
-  MATCHED: 'badge-neutral', LOCKED: 'badge-neutral', DELIVERED: 'badge-neutral',
+  MATCHED: 'badge-warning', LOCKED: 'badge-neutral', DELIVERED: 'badge-neutral',
   VERIFIED: 'badge-success', SETTLED: 'badge-success',
   DISPUTED: 'badge-danger', CANCELLED: 'badge-danger'
 };
@@ -15,7 +15,7 @@ export default function AdminTrades() {
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
-  const [expanded, setExpanded] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   const fetchTrades = async () => {
     try {
@@ -23,7 +23,7 @@ export default function AdminTrades() {
       const data = await api.getAdminTrades(filter || undefined);
       setTrades(data);
     } catch (err) {
-      toast.error('Failed to load trades: ' + err.toString());
+      toast.error('Failed to load trade records: ' + err.toString());
     } finally {
       setLoading(false);
     }
@@ -46,176 +46,202 @@ export default function AdminTrades() {
     if (val === null) return;
     try {
       await api.verifyDelivery(id, { deliveredKwh: Number(val) });
-      toast.success('Delivery recorded & trade settled!');
+      toast.success('Delivery recorded & trade settled on ledger!');
       fetchTrades();
     } catch (err) {
       toast.error('Verification error: ' + err.toString());
     }
   };
 
-  const handleAutoProgress = async (id) => {
-    try {
-      await api.progressTrade(id);
-      toast.success('Trade auto-progressed to SETTLED!');
-      fetchTrades();
-    } catch (err) {
-      toast.error('Auto-progress failed: ' + err.toString());
-    }
+  const toggleExpand = (id) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-2">
-          <Activity size={28} color="var(--color-primary)" />
-          <h1 style={{ margin: 0 }}>Trade Monitoring</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Activity size={24} color="var(--color-primary)" />
+            <h1 className="mb-0">Trade Lifecycle Monitoring</h1>
+          </div>
+          <p className="text-sm text-muted mb-0 mt-1">Real-time microgrid trade execution, contract verification, & settlement tracking</p>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Filter Toolbar */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           {['', 'MATCHED', 'LOCKED', 'DELIVERED', 'SETTLED', 'DISPUTED', 'CANCELLED'].map(s => (
-            <button key={s} onClick={() => setFilter(s)} className={`btn btn-sm ${filter === s ? 'btn-primary' : 'btn-outline'}`}>
-              {s || 'All'}
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              className={`btn btn-sm ${filter === s ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              {s || 'All Trades'}
             </button>
           ))}
         </div>
       </div>
 
       {loading ? (
-        <div className="p-8 text-center">Loading trades...</div>
+        <div className="table-responsive p-12 text-center text-muted">Loading trade execution records…</div>
       ) : trades.length === 0 ? (
-        <div className="card text-center p-8 text-muted">No trades found.</div>
+        <div className="card text-center p-12 text-muted">No trade records matching the selected filter.</div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {trades.map(t => (
-            <div key={t.id} className="card" style={{ padding: 0 }}>
-              {/* Header Row */}
-              <div
-                className="flex flex-wrap items-center justify-between gap-4 p-4 cursor-pointer"
-                style={{ borderBottom: expanded === t.id ? '1px solid var(--color-border)' : 'none' }}
-                onClick={() => setExpanded(expanded === t.id ? null : t.id)}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`badge ${STATUS_BADGE[t.status] || 'badge-neutral'}`}>{t.status}</span>
-                  <span className="text-xs font-mono text-muted">{t.id?.substring(0, 16)}…</span>
-                  <span className="badge badge-neutral text-xs">{t.zone_name || t.zone_id}</span>
-                </div>
-                <div className="flex gap-6 text-sm">
-                  <div><span className="text-muted">Qty:</span> <span className="font-bold">{Number(t.quantity_kwh).toFixed(2)} kWh</span></div>
-                  <div><span className="text-muted">Price:</span> <span className="font-bold">${Number(t.agreed_price).toFixed(4)}/kWh</span></div>
-                  <div><span className="text-muted">Value:</span> <span className="font-bold">${(Number(t.quantity_kwh) * Number(t.agreed_price)).toFixed(2)}</span></div>
-                  <div className="text-muted text-xs">{new Date(t.created_at).toLocaleString()}</div>
-                </div>
-              </div>
+        <div className="table-responsive mb-8">
+          <div className="p-4 bg-white border-b flex items-center justify-between">
+            <h3 className="m-0 text-base">Microgrid Trades — <b>{trades.length} records</b></h3>
+            <span className="badge badge-neutral text-xs">Click row or Manage to inspect lifecycle</span>
+          </div>
 
-              {/* Expanded Detail */}
-              {expanded === t.id && (
-                <div className="p-4">
-                  {/* Lifecycle Progress */}
-                  <div className="mb-4">
-                    <div className="text-xs font-bold text-muted mb-2">TRADE LIFECYCLE</div>
-                    <div className="flex items-center gap-2">
-                      {LIFECYCLE.map((step, idx) => {
-                        const stepIdx = LIFECYCLE.indexOf(t.status);
-                        const isDisputed = t.status === 'DISPUTED';
-                        const isCancelled = t.status === 'CANCELLED';
-                        const done = idx <= stepIdx || (!isDisputed && !isCancelled && stepIdx >= 0);
-                        return (
-                          <React.Fragment key={step}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                              <div style={{
-                                width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                background: idx <= LIFECYCLE.indexOf(t.status) ? 'var(--color-success)' : 'var(--color-border)',
-                                color: 'white'
-                              }}>
-                                {idx <= LIFECYCLE.indexOf(t.status) ? <CheckCircle size={14} /> : <Clock size={14} color="var(--color-text-secondary)" />}
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: '95px' }}>Status</th>
+                <th style={{ width: '110px' }}>Trade ID</th>
+                <th style={{ width: '100px' }}>Zone</th>
+                <th>Producer (Seller)</th>
+                <th>Consumer (Buyer)</th>
+                <th style={{ width: '100px' }}>Quantity</th>
+                <th style={{ width: '90px' }}>Rate</th>
+                <th style={{ width: '90px' }}>Total Value</th>
+                <th style={{ width: '160px' }}>Timestamp</th>
+                <th style={{ width: '85px', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map(t => {
+                const isExpanded = expandedId === t.id;
+                const totalVal = (Number(t.quantity_kwh) * Number(t.agreed_price)).toFixed(2);
+                const formattedDate = new Date(t.created_at).toLocaleDateString() + ', ' + new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <React.Fragment key={t.id}>
+                    <tr className="cursor-pointer hover:bg-slate-50" onClick={() => toggleExpand(t.id)}>
+                      <td>
+                        <span className={`badge ${STATUS_BADGE[t.status] || 'badge-neutral'}`}>{t.status}</span>
+                      </td>
+                      <td className="font-mono text-xs font-semibold text-primary">{t.id?.substring(0, 12)}…</td>
+                      <td><span className="badge badge-neutral">{t.zone_name || t.zone_id}</span></td>
+                      <td>
+                        <div className="font-semibold text-xs text-slate-900">{t.seller_name}</div>
+                        <div className="text-xs text-muted">{t.seller_email}</div>
+                      </td>
+                      <td>
+                        <div className="font-semibold text-xs text-slate-900">{t.buyer_name}</div>
+                        <div className="text-xs text-muted">{t.buyer_email}</div>
+                      </td>
+                      <td className="font-bold text-xs text-slate-900">{Number(t.quantity_kwh).toFixed(2)} kWh</td>
+                      <td className="text-xs font-semibold">${Number(t.agreed_price).toFixed(4)}</td>
+                      <td className="font-bold text-xs text-primary">${totalVal}</td>
+                      <td className="text-xs text-muted font-mono" style={{ whiteSpace: 'nowrap' }}>
+                        {formattedDate}
+                      </td>
+                      <td className="text-right">
+                        <button
+                          className="btn btn-outline btn-sm p-1 px-2.5 flex items-center gap-1"
+                          style={{ fontSize: '0.725rem' }}
+                          onClick={(e) => { e.stopPropagation(); toggleExpand(t.id); }}
+                        >
+                          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Manage
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* Expanded Lifecycle Drawer */}
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan="10" className="p-0 bg-slate-50 border-b">
+                          <div className="p-6 flex flex-col gap-6">
+                            {/* Stepper Card */}
+                            <div className="card bg-white p-5">
+                              <div className="text-xs font-bold text-muted uppercase tracking-wider mb-4 pb-2 border-b">Trade Lifecycle Execution Stepper</div>
+                              <div className="flex items-center justify-between">
+                                {LIFECYCLE.map((step, idx) => {
+                                  const currentIdx = LIFECYCLE.indexOf(t.status);
+                                  const isDone = idx <= currentIdx;
+                                  return (
+                                    <React.Fragment key={step}>
+                                      <div className="flex flex-col items-center gap-1.5">
+                                        <div
+                                          className="stepper-circle"
+                                          style={{
+                                            background: isDone ? 'var(--color-success)' : 'var(--color-border)',
+                                            color: '#ffffff'
+                                          }}
+                                        >
+                                          {isDone ? <CheckCircle size={14} /> : <Clock size={14} />}
+                                        </div>
+                                        <span className={`text-xs font-bold ${isDone ? 'text-slate-900' : 'text-slate-400'}`}>{step}</span>
+                                      </div>
+                                      {idx < LIFECYCLE.length - 1 && (
+                                        <div
+                                          className="flex-1"
+                                          style={{
+                                            height: 3,
+                                            background: idx < currentIdx ? 'var(--color-success)' : 'var(--color-border)',
+                                            margin: '0 8px 18px 8px'
+                                          }}
+                                        />
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
                               </div>
-                              <span className="text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{step}</span>
                             </div>
-                            {idx < LIFECYCLE.length - 1 && (
-                              <div style={{ flex: 1, height: 2, background: idx < LIFECYCLE.indexOf(t.status) ? 'var(--color-success)' : 'var(--color-border)', marginBottom: 20 }} />
+
+                            {/* Actions Bar */}
+                            {t.status !== 'SETTLED' && t.status !== 'CANCELLED' && (
+                              <div className="p-4 rounded bg-[#fcf3ed] border border-[#e2dcd5] flex items-center justify-between">
+                                <div className="text-xs font-bold text-stone-900">ADMINISTRATIVE LIFECYCLE CONTROLS</div>
+                                <div className="flex gap-2">
+                                  {t.status === 'MATCHED' && (
+                                    <button className="btn btn-sm btn-outline" onClick={() => handleLock(t.id)}>
+                                      <Lock size={13} /> Lock Capacity
+                                    </button>
+                                  )}
+                                  {(t.status === 'MATCHED' || t.status === 'LOCKED') && (
+                                    <button className="btn btn-sm btn-primary" onClick={() => handleVerifyDelivery(t.id, t.quantity_kwh)}>
+                                      <Zap size={13} /> Record Meter Delivery & Settle
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             )}
-                          </React.Fragment>
-                        );
-                      })}
-                      {t.status === 'DISPUTED' && (
-                        <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <AlertCircle size={24} color="var(--color-danger)" />
-                          <span className="text-xs font-bold" style={{ color: 'var(--color-danger)' }}>DISPUTED</span>
-                        </div>
-                      )}
-                      {t.status === 'CANCELLED' && (
-                        <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <XCircle size={24} color="var(--color-danger)" />
-                          <span className="text-xs font-bold" style={{ color: 'var(--color-danger)' }}>CANCELLED</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Actions Toolbar */}
-                  {t.status !== 'SETTLED' && t.status !== 'CANCELLED' && (
-                    <div className="p-3 mb-4 rounded flex items-center justify-between gap-4" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
-                      <div className="text-xs font-bold" style={{ color: '#3730a3' }}>LIFECYCLE ACTIONS</div>
-                      <div className="flex gap-2">
-                        {t.status === 'MATCHED' && (
-                          <button className="btn btn-sm btn-outline" onClick={() => handleLock(t.id)}>
-                            🔒 Lock Trade
-                          </button>
-                        )}
-                        {(t.status === 'MATCHED' || t.status === 'LOCKED') && (
-                          <button className="btn btn-sm btn-primary" onClick={() => handleVerifyDelivery(t.id, t.quantity_kwh)}>
-                            ⚡ Record Delivery & Verify
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Parties */}
-                  <div className="grid grid-cols-2 gap-6 mb-4">
-                    <div className="p-3 rounded" style={{ background: 'var(--color-bg)' }}>
-                      <div className="text-xs font-bold text-muted mb-2">PRODUCER (SELLER)</div>
-                      <div className="font-bold">{t.seller_name}</div>
-                      <div className="text-xs text-muted">{t.seller_email}</div>
-                      <div className="text-xs text-muted">{t.seller_role}</div>
-                    </div>
-                    <div className="p-3 rounded" style={{ background: 'var(--color-bg)' }}>
-                      <div className="text-xs font-bold text-muted mb-2">CONSUMER (BUYER)</div>
-                      <div className="font-bold">{t.buyer_name}</div>
-                      <div className="text-xs text-muted">{t.buyer_email}</div>
-                      <div className="text-xs text-muted">{t.buyer_role}</div>
-                    </div>
-                  </div>
-
-                  {/* Settlement */}
-                  {t.settlement_status && (
-                    <div className="p-3 rounded mb-4" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
-                      <div className="text-xs font-bold text-muted mb-2">SETTLEMENT</div>
-                      <div className="grid grid-cols-4 gap-4 text-sm">
-                        <div><div className="text-xs text-muted">Gross</div><div className="font-bold">${Number(t.gross_amount || 0).toFixed(2)}</div></div>
-                        <div><div className="text-xs text-muted">Platform Fee</div><div className="font-bold">${Number(t.platform_fee || 0).toFixed(2)}</div></div>
-                        <div><div className="text-xs text-muted">Grid Fee</div><div className="font-bold">${Number(t.grid_fee || 0).toFixed(2)}</div></div>
-                        <div><div className="text-xs text-muted">Seller Credit</div><div className="font-bold">${Number(t.seller_credit || 0).toFixed(2)}</div></div>
-                      </div>
-                      <div className="text-xs text-muted mt-2">Settled at: {t.settled_at ? new Date(t.settled_at).toLocaleString() : '—'}</div>
-                    </div>
-                  )}
-
-                  {/* Dispute */}
-                  {t.shortfall_percent !== null && t.shortfall_percent !== undefined && (
-                    <div className="p-3 rounded" style={{ background: '#fff3cd', border: '1px solid #f59e0b' }}>
-                      <div className="text-xs font-bold mb-2" style={{ color: '#92400e' }}>DISPUTE DETAILS</div>
-                      <div className="text-sm">
-                        Contracted: <b>{t.contracted_kwh} kWh</b> | Delivered: <b>{t.delivered_kwh} kWh</b> | Shortfall: <b>{Number(t.shortfall_percent).toFixed(1)}%</b>
-                      </div>
-                      {t.resolution && <div className="text-xs mt-2">Resolution: {t.resolution}</div>}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                            {/* Financial Settlement Info */}
+                            {t.settlement_status && (
+                              <div className="card bg-white p-4">
+                                <div className="text-xs font-bold text-muted uppercase tracking-wider mb-2">Financial Settlement Breakdown</div>
+                                <div className="grid grid-cols-4 gap-4 text-xs">
+                                  <div><span className="text-muted block">Gross Amount</span><span className="font-bold text-slate-900">${Number(t.gross_amount || 0).toFixed(2)}</span></div>
+                                  <div><span className="text-muted block">Platform Fee</span><span className="font-bold text-slate-900">${Number(t.platform_fee || 0).toFixed(2)}</span></div>
+                                  <div><span className="text-muted block">Grid Fee</span><span className="font-bold text-slate-900">${Number(t.grid_fee || 0).toFixed(2)}</span></div>
+                                  <div><span className="text-muted block">Seller Net Credit</span><span className="font-bold text-primary">${Number(t.seller_credit || 0).toFixed(2)}</span></div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
+
+      <style>{`
+        .stepper-circle {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+      `}</style>
     </div>
   );
 }

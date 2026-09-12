@@ -28,8 +28,8 @@ export default function EnergyCard({ title, value, unit, icon: Icon, trendData }
                 <Line 
                   type="monotone" 
                   dataKey="value" 
-                  stroke="var(--color-primary-dark)" 
-                  strokeWidth={2} 
+                  stroke="#1D3557" 
+                  strokeWidth={2.5} 
                   dot={false} 
                 />
                 <Tooltip content={<></>} />

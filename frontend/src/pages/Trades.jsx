@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import TradeStatus from '../components/TradeStatus';
-import { Clock } from 'lucide-react';
+import { Clock, Activity, ArrowUpRight } from 'lucide-react';
 
 export default function Trades({ user }) {
   const [trades, setTrades] = useState([]);
@@ -15,62 +15,68 @@ export default function Trades({ user }) {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div>Loading trades...</div>;
+  if (loading) return <div className="card text-center p-12 text-muted">Loading trade history…</div>;
 
   return (
     <div>
-      <h1 className="mb-8">My Trades</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-4 border-b">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Activity size={24} color="var(--color-primary)" />
+            <h1 className="mb-0">My P2P Energy Trades</h1>
+          </div>
+          <p className="text-sm text-muted mb-0 mt-1">Track your active & settled solar energy trade execution history</p>
+        </div>
+      </div>
       
       {trades.length === 0 ? (
-        <div className="card text-center p-8 text-muted">
-          No trades found.
+        <div className="card text-center p-12 text-muted">
+          No trades found for your account yet.
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="flex flex-col gap-5">
           {trades.map(t => {
             const isSeller = t.seller_id === user.id;
-            const roleLabel = isSeller ? 'Seller (You)' : 'Buyer (You)';
+            const roleLabel = isSeller ? 'Producer (You)' : 'Consumer (You)';
 
             return (
-              <div key={t.id} className="card flex flex-wrap-responsive items-center justify-between">
-                <div>
-                  <div className="flex gap-4 items-center mb-2">
+              <div key={t.id} className="card p-6 flex flex-col gap-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
                     <span className="badge badge-neutral">{t.zone_id}</span>
-                    <span className="text-sm font-bold text-muted">{roleLabel}</span>
-                  </div>
-                  <div className="mb-4 text-sm">
-                    <span className="text-muted">Producer:</span> <span className="font-bold">{t.seller_name || t.seller_id.substring(0, 8)}</span>
-                    <span className="mx-2 text-muted">•</span>
-                    <span className="text-muted">Consumer:</span> <span className="font-bold">{t.buyer_name || t.buyer_id.substring(0, 8)}</span>
+                    <span className="badge badge-success">{roleLabel}</span>
                   </div>
                   
-                  <div className="flex flex-wrap-responsive gap-8 gap-responsive mb-4">
-                    <div>
-                      <div className="text-xs text-muted mb-1">Quantity</div>
-                      <div className="font-bold">{Number(t.quantity_kwh).toFixed(2)} kWh</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted mb-1">Agreed Price</div>
-                      <div className="font-bold">${Number(t.agreed_price).toFixed(2)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted mb-1">Total Value</div>
-                      <div className="font-bold">${(Number(t.quantity_kwh) * Number(t.agreed_price)).toFixed(2)}</div>
-                    </div>
-                  </div>
+                  <Link to={`/trades/${t.id}/settlement`} className="btn btn-outline btn-sm">
+                    View Settlement Invoice <ArrowUpRight size={14} />
+                  </Link>
+                </div>
 
-                  <TradeStatus status={t.status} />
-                  
-                  <div className="text-xs text-muted mt-4 flex items-center gap-1">
-                    <Clock size={12} />
-                    <span>Created: {new Date(t.created_at).toLocaleString()}</span>
+                <div className="grid grid-cols-4 gap-4 p-4 rounded-lg bg-slate-50 border">
+                  <div>
+                    <div className="text-xs text-muted font-semibold uppercase">Producer</div>
+                    <div className="font-bold text-sm text-slate-900">{t.seller_name || t.seller_id.substring(0, 8)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted font-semibold uppercase">Consumer</div>
+                    <div className="font-bold text-sm text-slate-900">{t.buyer_name || t.buyer_id.substring(0, 8)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted font-semibold uppercase">Energy Quantity</div>
+                    <div className="font-bold text-sm text-slate-900">{Number(t.quantity_kwh).toFixed(2)} kWh</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted font-semibold uppercase">Total Value</div>
+                    <div className="font-bold text-sm text-primary">${(Number(t.quantity_kwh) * Number(t.agreed_price)).toFixed(2)}</div>
                   </div>
                 </div>
 
-                <div>
-                  <Link to={`/trades/${t.id}/settlement`} className="btn btn-outline">
-                    View Settlement
-                  </Link>
+                <TradeStatus status={t.status} />
+
+                <div className="text-xs text-muted flex items-center gap-1 font-mono pt-2 border-t">
+                  <Clock size={12} />
+                  <span>Created: {new Date(t.created_at).toLocaleString()}</span>
                 </div>
               </div>
             );

@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Shield, Filter } from 'lucide-react';
+import { Search, Shield, Filter, Database, Terminal, DollarSign } from 'lucide-react';
 import api from '../services/api';
 import { toast } from '../utils/toast';
 
 const EVENT_COLORS = {
-  USER_REGISTERED: '#6366f1', USER_LOGIN: '#10b981',
-  LISTING_CREATED: 'var(--color-secondary)', ENERGY_PURCHASED: 'var(--color-primary)',
-  TRADE_SETTLED: 'var(--color-success)', DEPOSIT_REQUESTED: '#f59e0b',
+  LISTING_CREATED: 'var(--color-gold)', ENERGY_PURCHASED: 'var(--color-primary-accent)',
+  TRADE_SETTLED: 'var(--color-success)', DEPOSIT_REQUESTED: '#b8860b',
   DEPOSIT_APPROVED: 'var(--color-success)', USER_REQUEST_APPROVED: 'var(--color-success)',
-  USER_REQUEST_REJECTED: 'var(--color-danger)',
+  USER_REQUEST_REJECTED: 'var(--color-danger)', TRADE_LOCKED: 'var(--color-primary)',
+  TRADE_DELIVERED: '#4b5563', TRADE_VERIFIED: 'var(--color-success)'
 };
 
 export default function AdminAudit() {
@@ -36,18 +36,22 @@ export default function AdminAudit() {
   const fetchLogs = async (p = 1) => {
     try {
       setLoading(true);
-      const params = { page: p, limit: LIMIT };
+      // Exclude generic USER_LOGIN events so only transaction history is shown
+      const params = { page: p, limit: LIMIT, exclude_type: 'USER_LOGIN' };
       if (search) params.search = search;
       if (eventType) params.event_type = eventType;
       if (actorRole) params.actor_role = actorRole;
       if (fromDate) params.from = fromDate;
       if (toDate) params.to = toDate;
       const data = await api.getAuditLogs(params);
-      setLogs(data.logs);
+      
+      // Secondary filter safety check
+      const filtered = (data.logs || []).filter(l => l.event_type !== 'USER_LOGIN');
+      setLogs(filtered);
       setTotal(data.total);
       setPage(p);
     } catch (err) {
-      toast.error('Failed to load audit logs: ' + err.toString());
+      toast.error('Failed to load transaction history: ' + err.toString());
     } finally {
       setLoading(false);
     }
@@ -70,9 +74,9 @@ export default function AdminAudit() {
       const list = Array.isArray(events) ? events : [];
       setTradeEvents(list);
       if (list.length === 0) {
-        toast.info(`No events found for ID matching "${idToUse}".`);
+        toast.info(`No lifecycle events found for trade ID matching "${idToUse}".`);
       } else {
-        toast.success(`Found ${list.length} lifecycle event(s).`);
+        toast.success(`Found ${list.length} transaction lifecycle event(s).`);
       }
     } catch (err) {
       toast.error('Search error: ' + err.toString());
@@ -86,7 +90,7 @@ export default function AdminAudit() {
       setBlockchain(data);
       setShowBlockchain(true);
     } catch (err) {
-      toast.error('Failed to load blockchain: ' + err.toString());
+      toast.error('Failed to load blockchain ledger: ' + err.toString());
     }
   };
 
@@ -94,33 +98,55 @@ export default function AdminAudit() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-8">
-        <Shield size={28} color="var(--color-primary)" />
-        <h1 style={{ margin: 0 }}>Audit Log</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+        <div>
+          <div className="flex items-center gap-2.5">
+            <DollarSign size={24} color="var(--color-primary)" />
+            <h1 className="mb-0">Trade & Financial Transaction History</h1>
+          </div>
+          <p className="text-sm text-muted mb-0 mt-1">Immutable transaction ledger, trade creation, energy settlement, & financial audit trail</p>
+        </div>
+        <button className="btn btn-outline btn-sm" onClick={handleLoadBlockchain}>
+          <Database size={14} /> {showBlockchain ? 'Refresh Ledger' : 'Load Blockchain Ledger'}
+        </button>
       </div>
 
-      {/* Filters */}
+      {/* Filter Toolbar Card */}
       <div className="card mb-6">
-        <form onSubmit={handleSearch} className="grid gap-4">
-          <div className="grid grid-cols-4 gap-4">
+        <form onSubmit={handleSearch} className="flex flex-col gap-4">
+          <div className="grid grid-cols-4 gap-4 items-end">
             <div>
-              <label className="text-xs font-bold text-muted block mb-1">Search</label>
-              <div className="flex items-center gap-2">
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Actor name, email, entity ID…" style={{ marginBottom: 0 }} />
-              </div>
+              <label>Transaction Keyword Search</label>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search actor, trade ID, details…"
+              />
             </div>
             <div>
-              <label className="text-xs font-bold text-muted block mb-1">Event Type</label>
-              <select value={eventType} onChange={e => setEventType(e.target.value)} style={{ width: '100%', marginBottom: 0 }}>
-                <option value="">All Events</option>
-                {['USER_REGISTERED','USER_LOGIN','LISTING_CREATED','ENERGY_PURCHASED','TRADE_SETTLED','DEPOSIT_REQUESTED','DEPOSIT_APPROVED','USER_REQUEST_APPROVED','USER_REQUEST_REJECTED'].map(t => (
+              <label>Transaction Event Type</label>
+              <select value={eventType} onChange={e => setEventType(e.target.value)}>
+                <option value="">All Transaction Types</option>
+                {[
+                  'LISTING_CREATED',
+                  'ENERGY_PURCHASED',
+                  'TRADE_SETTLED',
+                  'TRADE_LOCKED',
+                  'TRADE_DELIVERED',
+                  'TRADE_VERIFIED',
+                  'DEPOSIT_REQUESTED',
+                  'DEPOSIT_APPROVED',
+                  'USER_REQUEST_APPROVED',
+                  'USER_REQUEST_REJECTED'
+                ].map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-xs font-bold text-muted block mb-1">Actor Role</label>
-              <select value={actorRole} onChange={e => setActorRole(e.target.value)} style={{ width: '100%', marginBottom: 0 }}>
+              <label>Actor Role</label>
+              <select value={actorRole} onChange={e => setActorRole(e.target.value)}>
                 <option value="">All Roles</option>
                 {['admin','prosumer','consumer','regulator','utility'].map(r => (
                   <option key={r} value={r}>{r}</option>
@@ -128,85 +154,105 @@ export default function AdminAudit() {
               </select>
             </div>
             <div>
-              <label className="text-xs font-bold text-muted block mb-1">Date Range</label>
+              <label>Transaction Date Filter</label>
               <div className="flex gap-2">
-                <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={{ marginBottom: 0, flex: 1 }} />
-                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={{ marginBottom: 0, flex: 1 }} />
+                <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} placeholder="From" />
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} placeholder="To" />
               </div>
             </div>
           </div>
-          <div className="flex gap-3">
-            <button type="submit" className="btn btn-primary"><Search size={14} className="inline mr-1" />Search Audit Logs</button>
-            <button type="button" className="btn btn-outline" onClick={() => { setSearch(''); setEventType(''); setActorRole(''); setFromDate(''); setToDate(''); setTimeout(() => fetchLogs(1), 0); }}>
-              <Filter size={14} className="inline mr-1" />Clear
+          <div className="flex items-center gap-3 pt-2 border-t">
+            <button type="submit" className="btn btn-primary btn-sm">
+              <Search size={14} /> Filter Transactions
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => { setSearch(''); setEventType(''); setActorRole(''); setFromDate(''); setToDate(''); setTimeout(() => fetchLogs(1), 0); }}
+            >
+              <Filter size={14} /> Clear Filters
             </button>
           </div>
         </form>
       </div>
 
       {/* Audit Log Table */}
-      <div className="card mb-8" style={{ padding: 0 }}>
-        <div className="p-4 border-b flex items-center justify-between" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <h3 style={{ margin: 0 }}>Platform Events — {total} total records</h3>
-          <span className="text-xs text-muted">Append-only • Immutable</span>
+      <div className="table-responsive mb-8">
+        <div className="p-4 bg-white border-b flex items-center justify-between">
+          <h3 className="m-0 text-base">Recorded Trade Transactions — <b>{total} total records</b></h3>
+          <span className="badge badge-neutral text-xs">Append-Only • Cryptographically Immutable</span>
         </div>
+
         {loading ? (
-          <div className="p-8 text-center">Loading...</div>
+          <div className="p-12 text-center text-muted">Loading trade transaction records…</div>
         ) : logs.length === 0 ? (
-          <div className="p-8 text-center text-muted">No audit events match your filters.</div>
+          <div className="p-12 text-center text-muted">No trade transaction records match your search filters.</div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
-              <thead style={{ background: 'var(--color-bg)' }}>
-                <tr>
-                  {['Timestamp', 'Event', 'Actor', 'Role', 'Entity', 'Entity ID', 'Status', 'Details'].map(h => (
-                    <th key={h} className="p-3 text-left text-xs font-bold text-muted" style={{ borderBottom: '2px solid var(--color-border)', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map(log => (
-                  <tr key={log.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td className="p-3 text-xs" style={{ whiteSpace: 'nowrap' }}>{new Date(log.created_at).toLocaleString()}</td>
-                    <td className="p-3">
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: (EVENT_COLORS[log.event_type] || '#aaa') + '22', color: EVENT_COLORS[log.event_type] || '#aaa', whiteSpace: 'nowrap' }}>
-                        {log.event_type}
-                      </span>
-                    </td>
-                    <td className="p-3 text-sm">
-                      <div className="font-bold">{log.actor_name || '—'}</div>
-                      {log.actor_email && <div className="text-xs text-muted">{log.actor_email}</div>}
-                    </td>
-                    <td className="p-3"><span className="badge badge-neutral text-xs">{log.actor_role || '—'}</span></td>
-                    <td className="p-3 text-xs text-muted">{log.entity_type || '—'}</td>
-                    <td className="p-3 text-xs" style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {log.entity_id ? (
-                        <button
-                          type="button"
-                          className="text-xs font-mono text-primary cursor-pointer hover:underline bg-transparent border-0 p-0"
-                          title={`Click to inspect ${log.entity_id}`}
-                          onClick={() => handleTradeSearch(null, log.entity_id)}
-                        >
-                          {log.entity_id.substring(0, 12)}…
-                        </button>
-                      ) : '—'}
-                    </td>
-                    <td className="p-3">
-                      {log.status && <span className={`badge ${log.status === 'SUCCESS' || log.status === 'APPROVED' || log.status === 'ACTIVE' || log.status === 'SETTLED' ? 'badge-success' : log.status === 'PENDING' ? 'badge-danger' : 'badge-neutral'}`}>{log.status}</span>}
-                    </td>
-                    <td className="p-3 text-xs text-muted" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {log.details ? <span title={JSON.stringify(log.details)}>{JSON.stringify(log.details).substring(0, 40)}…</span> : '—'}
-                    </td>
-                  </tr>
+          <table>
+            <thead>
+              <tr>
+                {['Timestamp', 'Transaction Event', 'Actor', 'Role', 'Entity', 'Trade / Entity ID', 'Status', 'Transaction Details'].map(h => (
+                  <th key={h}>{h}</th>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map(log => (
+                <tr key={log.id}>
+                  <td className="text-xs text-muted font-mono" style={{ whiteSpace: 'nowrap' }}>
+                    {new Date(log.created_at).toLocaleString()}
+                  </td>
+                  <td>
+                    <span className="event-badge" style={{
+                      backgroundColor: `${EVENT_COLORS[log.event_type] || '#8c5638'}15`,
+                      color: EVENT_COLORS[log.event_type] || 'var(--color-primary)',
+                      border: `1px solid ${EVENT_COLORS[log.event_type] || '#8c5638'}35`
+                    }}>
+                      {log.event_type}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="font-semibold text-sm">{log.actor_name || '—'}</div>
+                    {log.actor_email && <div className="text-xs text-muted">{log.actor_email}</div>}
+                  </td>
+                  <td><span className="badge badge-neutral">{log.actor_role || '—'}</span></td>
+                  <td className="text-xs text-muted">{log.entity_type || '—'}</td>
+                  <td>
+                    {log.entity_id ? (
+                      <button
+                        type="button"
+                        className="font-mono text-xs text-primary cursor-pointer hover:underline bg-transparent border-0 p-0"
+                        title={`Click to inspect trade lifecycle for ${log.entity_id}`}
+                        onClick={() => handleTradeSearch(null, log.entity_id)}
+                      >
+                        {log.entity_id.substring(0, 14)}…
+                      </button>
+                    ) : <span className="text-muted">—</span>}
+                  </td>
+                  <td>
+                    {log.status && (
+                      <span className={`badge ${log.status === 'SUCCESS' || log.status === 'APPROVED' || log.status === 'ACTIVE' || log.status === 'SETTLED' ? 'badge-success' : log.status === 'PENDING' ? 'badge-warning' : 'badge-neutral'}`}>
+                        {log.status}
+                      </span>
+                    )}
+                  </td>
+                  <td className="text-xs text-muted" style={{ maxWidth: 240 }}>
+                    {log.details ? (
+                      <div className="font-mono text-xs text-truncate" title={JSON.stringify(log.details)}>
+                        {JSON.stringify(log.details).substring(0, 50)}…
+                      </div>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
+
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="p-4 flex items-center justify-between border-t" style={{ borderTop: '1px solid var(--color-border)' }}>
-            <span className="text-sm text-muted">Page {page} of {totalPages}</span>
+          <div className="p-4 bg-white border-t flex items-center justify-between">
+            <span className="text-xs text-muted font-medium">Showing page {page} of {totalPages} ({total} entries)</span>
             <div className="flex gap-2">
               <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => fetchLogs(page - 1)}>← Prev</button>
               <button className="btn btn-outline btn-sm" disabled={page >= totalPages} onClick={() => fetchLogs(page + 1)}>Next →</button>
@@ -215,73 +261,76 @@ export default function AdminAudit() {
         )}
       </div>
 
-      {/* Blockchain Ledger */}
-      <div className="card mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 style={{ margin: 0 }}>Blockchain Ledger</h3>
-          <button className="btn btn-outline btn-sm" onClick={handleLoadBlockchain}>
-            <Shield size={14} className="inline mr-1" />Load Blockchain Events
-          </button>
-        </div>
-        {showBlockchain && blockchain && (
-          <>
-            <div className={`p-3 mb-4 rounded`} style={{ background: blockchain.ledger_valid?.valid ? '#e8f5e9' : '#ffebee', border: `1px solid ${blockchain.ledger_valid?.valid ? 'var(--color-success)' : 'var(--color-danger)'}` }}>
-              <span className="font-bold" style={{ color: blockchain.ledger_valid?.valid ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                {blockchain.ledger_valid?.valid ? '✓ VERIFIED' : '✗ TAMPERED'}
-              </span> — {blockchain.events.length} blockchain events loaded
+      {/* Blockchain Ledger Display */}
+      {showBlockchain && blockchain && (
+        <div className="card mb-8">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b">
+            <div className="flex items-center gap-2">
+              <Database size={18} color="var(--color-primary)" />
+              <h3 className="m-0">Cryptographic Blockchain Trade Ledger</h3>
             </div>
-            <div style={{ overflowX: 'auto', maxHeight: 400 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                    {['Timestamp', 'Event Type', 'Trade ID', 'Hash (truncated)', 'Prev Hash'].map(h => (
-                      <th key={h} className="p-2 text-left text-xs font-bold text-muted">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {blockchain.events.map(e => (
-                    <tr key={e.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td className="p-2 text-xs">{new Date(e.timestamp).toLocaleString()}</td>
-                      <td className="p-2 text-xs font-bold">{e.event_type}</td>
-                      <td className="p-2 text-xs text-muted">{e.trade_id?.substring(0, 12)}…</td>
-                      <td className="p-2 text-xs font-mono text-muted">{e.event_hash?.substring(0, 20)}…</td>
-                      <td className="p-2 text-xs font-mono text-muted">{e.previous_hash ? e.previous_hash.substring(0, 16) + '…' : 'GENESIS'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
+            <span className={`badge ${blockchain.ledger_valid?.valid ? 'badge-success' : 'badge-danger'}`}>
+              {blockchain.ledger_valid?.valid ? '✓ SHA-256 HashChain Verified' : '✗ Tampering Detected'}
+            </span>
+          </div>
 
-      {/* Trade Event Lifecycle Search */}
+          <div className="table-responsive" style={{ maxHeight: 350, overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  {['Timestamp', 'Event Type', 'Trade ID', 'Event Hash (SHA-256)', 'Previous Hash'].map(h => (
+                    <th key={h}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {blockchain.events.map(e => (
+                  <tr key={e.id}>
+                    <td className="text-xs font-mono text-muted">{new Date(e.timestamp).toLocaleString()}</td>
+                    <td className="font-semibold text-xs">{e.event_type}</td>
+                    <td className="text-xs font-mono text-muted">{e.trade_id?.substring(0, 12)}…</td>
+                    <td className="text-xs font-mono text-primary">{e.event_hash?.substring(0, 24)}…</td>
+                    <td className="text-xs font-mono text-muted">{e.previous_hash ? e.previous_hash.substring(0, 16) + '…' : 'GENESIS'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Trade Event Inspector */}
       <div className="card">
-        <h3 className="mb-4">Trade Lifecycle Inspector</h3>
-        <form onSubmit={handleTradeSearch} className="flex gap-4 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Terminal size={18} color="var(--color-primary)" />
+          <h3 className="m-0">Trade Lifecycle Event Inspector</h3>
+        </div>
+        <form onSubmit={handleTradeSearch} className="flex gap-3 mb-6">
           <input
             type="text"
             value={tradeSearchId}
             onChange={e => setTradeSearchId(e.target.value)}
-            placeholder="Enter Trade ID (UUID) to inspect lifecycle…"
-            style={{ flex: 1, marginBottom: 0 }}
+            placeholder="Paste Trade UUID to view cryptographic lifecycle chain…"
+            style={{ flex: 1 }}
           />
-          <button type="submit" className="btn btn-primary"><Search size={14} className="inline mr-1" />Inspect</button>
+          <button type="submit" className="btn btn-primary btn-sm">
+            <Search size={14} /> Inspect Lifecycle
+          </button>
         </form>
+
         {tradeEvents.length > 0 && (
           <div className="flex flex-col gap-3">
             {tradeEvents.map((e, idx) => (
-              <div key={idx} className="flex items-start gap-4 p-4 rounded" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--color-success)', flexShrink: 0, marginTop: 5 }} />
+              <div key={idx} className="p-4 rounded border bg-slate-50 flex items-start gap-4">
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--color-success)', marginTop: 5, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-bold text-sm">{e.eventType || e.event_type}</span>
-                    <span className="text-xs text-muted">{new Date(e.timestamp).toLocaleString()}</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-sm text-slate-900">{e.eventType || e.event_type}</span>
+                    <span className="text-xs text-muted font-mono">{new Date(e.timestamp).toLocaleString()}</span>
                   </div>
-                  <div className="text-xs font-mono text-muted">Hash: {(e.currentHash || e.event_hash || '').substring(0, 32)}…</div>
+                  <div className="text-xs font-mono text-muted">Hash: <span className="text-slate-700">{(e.currentHash || e.event_hash || '').substring(0, 40)}…</span></div>
                   {(e.eventData || e.event_data) && (
-                    <pre className="text-xs mt-2 p-2 rounded" style={{ background: 'var(--color-card)', overflow: 'auto' }}>
+                    <pre className="text-xs mt-2 p-3 rounded border bg-white font-mono overflow-auto" style={{ maxHeight: 150 }}>
                       {JSON.stringify(e.eventData || e.event_data, null, 2)}
                     </pre>
                   )}
@@ -291,6 +340,23 @@ export default function AdminAudit() {
           </div>
         )}
       </div>
+
+      <style>{`
+        .event-badge {
+          display: inline-flex;
+          padding: 2px 8px;
+          border-radius: 3px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          white-space: nowrap;
+        }
+        .text-truncate {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Save, AlertCircle } from 'lucide-react';
+import { Settings, Save, AlertCircle, Cpu, Sliders, CheckCircle } from 'lucide-react';
 import api from '../services/api';
 import { toast } from '../utils/toast';
 
@@ -46,7 +46,7 @@ export default function AdminSettings() {
   const handleApproveDeposit = async (id) => {
     try {
       await api.approveDeposit(id);
-      toast.success('Deposit approved! Funds minted to user wallet and recorded on ledger.');
+      toast.success('Deposit approved! Funds credited to user wallet and recorded on ledger.');
       fetchDeposits();
     } catch (err) {
       toast.error(err.toString());
@@ -91,7 +91,7 @@ export default function AdminSettings() {
         })
       ]);
       toast.success('Platform configuration updated successfully!');
-      fetchZones(); // Refresh zones list
+      fetchZones();
     } catch (err) {
       toast.error(err.toString());
     } finally {
@@ -99,136 +99,141 @@ export default function AdminSettings() {
     }
   };
 
-  if (loading) return <div>Loading platform settings...</div>;
+  if (loading) return <div className="card text-center p-12 text-muted">Loading platform settings…</div>;
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-8">
-        <Settings size={28} color="var(--color-primary-dark)" />
-        <h1 style={{ margin: 0 }}>Platform Setup</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-4 border-b">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Settings size={24} color="var(--color-primary)" />
+            <h1 className="mb-0">Platform & Grid Setup</h1>
+          </div>
+          <p className="text-sm text-muted mb-0 mt-1">Configure microgrid hardware thresholds, dynamic pricing parameters, & wallet deposits</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-8">
+      <div className="grid grid-cols-3 gap-6 mb-12">
+        {/* Left Column: Grid Zones */}
         <div className="col-span-1">
-          <div className="card" style={{ padding: 0 }}>
-            <h3 className="p-4 mb-0 border-b" style={{ borderBottom: '1px solid var(--color-border)' }}>Grid Zones</h3>
-            <div className="flex-col flex">
+          <div className="card p-0 overflow-hidden">
+            <div className="p-4 border-b bg-white flex items-center justify-between">
+              <span className="font-bold text-sm text-slate-900">Grid Zone Hardware List</span>
+              <span className="badge badge-neutral text-xs">{zones.length} Zones</span>
+            </div>
+            <div className="flex flex-col">
               {zones.map(z => (
                 <button
                   key={z.id}
                   onClick={() => handleSelectZone(z)}
-                  style={{
-                    padding: '16px',
-                    textAlign: 'left',
-                    background: selectedZone?.id === z.id ? '#e3f2fd' : 'none',
-                    border: 'none',
-                    borderBottom: '1px solid var(--color-border)',
-                    cursor: 'pointer',
-                    fontWeight: selectedZone?.id === z.id ? 700 : 500
-                  }}
+                  className={`p-4 border-b text-left flex items-center justify-between transition-colors bg-transparent border-0 cursor-pointer ${selectedZone?.id === z.id ? 'bg-[#fcf3ed] border-l-4 border-l-[#8c5638]' : 'hover:bg-slate-50'}`}
+                  style={{ borderBottom: '1px solid var(--color-border)' }}
                 >
-                  <div className="text-sm">{z.name}</div>
-                  <div className="text-xs text-muted">{z.id}</div>
+                  <div>
+                    <div className="font-semibold text-sm text-slate-900">{z.name}</div>
+                    <div className="text-xs text-muted font-mono">{z.id}</div>
+                  </div>
+                  <span className={`badge ${z.status === 'NORMAL' ? 'badge-success' : 'badge-danger'}`}>{z.status}</span>
                 </button>
               ))}
             </div>
           </div>
         </div>
 
+        {/* Right Column: Zone Form */}
         <div className="col-span-2">
           {selectedZone && pricingConfig ? (
             <div className="card">
-              <div className="flex items-center justify-between mb-6">
-                <h2 style={{ margin: 0 }}>Configure {selectedZone.name}</h2>
+              <div className="flex items-center justify-between mb-6 pb-3 border-b">
+                <div className="flex items-center gap-2">
+                  <Cpu size={20} color="var(--color-primary)" />
+                  <h2 className="m-0 text-lg">Configure Hardware & Pricing — {selectedZone.name}</h2>
+                </div>
                 <span className="badge badge-neutral">{selectedZone.status}</span>
               </div>
               
-              <form onSubmit={handleSubmit} className="grid gap-6">
-                
-                {/* Zone Settings */}
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                 <div>
-                  <h3 className="text-sm font-bold text-muted mb-4 border-b pb-2" style={{ borderBottom: '1px solid var(--color-border)' }}>Grid Hardware Limits</h3>
+                  <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-4 pb-2 border-b">Hardware Capacity & Load Limits</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-sm font-bold block mb-1">Max Capacity (kWh)</label>
+                      <label>Max Grid Capacity (kW)</label>
                       <input type="number" step="0.1" name="capacity_kw" value={formData.capacity_kw} onChange={handleChange} required />
                     </div>
                     <div>
-                      <label className="text-sm font-bold block mb-1">Congestion Threshold (kWh)</label>
+                      <label>Congestion Threshold (kW)</label>
                       <input type="number" step="0.1" name="congestion_threshold" value={formData.congestion_threshold} onChange={handleChange} required />
-                      <p className="text-xs text-muted mt-1">If load exceeds this, the grid is marked CONSTRAINED.</p>
+                      <p className="text-xs text-muted mt-1">Triggers dynamic pricing multiplier when load reaches threshold.</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Pricing Rules */}
                 <div>
-                  <h3 className="text-sm font-bold text-muted mb-4 border-b pb-2" style={{ borderBottom: '1px solid var(--color-border)' }}>Dynamic Pricing Rules</h3>
+                  <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-4 pb-2 border-b">Dynamic Pricing Formulas</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-sm font-bold block mb-1">Floor Price ($/kWh)</label>
+                      <label>Floor Price ($/kWh)</label>
                       <input type="number" step="0.01" name="floor_price" value={formData.floor_price} onChange={handleChange} required />
                     </div>
                     <div>
-                      <label className="text-sm font-bold block mb-1">Ceiling Price ($/kWh)</label>
+                      <label>Ceiling Price ($/kWh)</label>
                       <input type="number" step="0.01" name="ceiling_price" value={formData.ceiling_price} onChange={handleChange} required />
                     </div>
                     <div className="col-span-2">
-                      <label className="text-sm font-bold block mb-1">Price Elasticity Factor</label>
+                      <label>Price Elasticity Factor</label>
                       <input type="number" step="0.1" name="elasticity_factor" value={formData.elasticity_factor} onChange={handleChange} required />
-                      <p className="text-xs text-muted mt-1">Higher factor makes the price swing faster as demand outpaces supply.</p>
+                      <p className="text-xs text-muted mt-1">Controls sensitivity of price fluctuations relative to net surplus vs demand ratio.</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex justify-end mt-4 pt-4 border-t" style={{ borderTop: '1px solid var(--color-border)' }}>
-                  <button type="submit" disabled={saving} className="btn btn-primary flex items-center gap-2">
-                    <Save size={16} /> {saving ? 'Saving...' : 'Save Configuration'}
+                <div className="flex justify-end pt-4 border-t">
+                  <button type="submit" disabled={saving} className="btn btn-primary">
+                    <Save size={15} /> {saving ? 'Saving Changes…' : 'Save Zone Parameters'}
                   </button>
                 </div>
               </form>
             </div>
           ) : (
-            <div className="card text-center p-8 text-muted flex-col items-center justify-center flex" style={{ height: '100%' }}>
-              <AlertCircle size={48} color="var(--color-border)" className="mb-4" />
-              <p>Select a grid zone from the left to configure its hardware limits and dynamic pricing rules.</p>
+            <div className="card text-center p-12 text-muted flex flex-col items-center justify-center min-h-64">
+              <Sliders size={40} color="var(--color-text-muted)" className="mb-3" style={{ opacity: 0.5 }} />
+              <p className="text-sm font-semibold mb-0">Select a grid zone from the left panel to configure hardware thresholds and rate rules.</p>
             </div>
           )}
         </div>
       </div>
 
-      <div className="mt-8">
-        <h2 className="mb-4">Pending Wallet Deposits</h2>
+      {/* Pending Deposits Table */}
+      <div>
+        <h2 className="text-lg font-bold mb-4">Pending Wallet Deposits Queue</h2>
         {deposits.length === 0 ? (
-          <div className="card text-center p-8 text-muted">No pending deposits.</div>
+          <div className="card text-center p-8 text-muted">No pending deposit requests awaiting approval.</div>
         ) : (
-          <div className="card table-responsive" style={{ padding: 0 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ backgroundColor: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+          <div className="table-responsive">
+            <table>
+              <thead>
                 <tr>
-                  <th className="p-4 text-left text-sm font-bold">User</th>
-                  <th className="p-4 text-left text-sm font-bold">Role</th>
-                  <th className="p-4 text-left text-sm font-bold">Amount</th>
-                  <th className="p-4 text-left text-sm font-bold">Date</th>
-                  <th className="p-4 text-left text-sm font-bold">Status</th>
-                  <th className="p-4 text-right text-sm font-bold">Actions</th>
+                  {['User Name & Email', 'Role', 'Deposit Amount ($)', 'Request Date', 'Status', 'Actions'].map(h => (
+                    <th key={h}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {deposits.map(d => (
-                  <tr key={d.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td className="p-4">
-                      <div>{d.name}</div>
+                  <tr key={d.id}>
+                    <td>
+                      <div className="font-semibold text-sm">{d.name}</div>
                       <div className="text-xs text-muted">{d.email}</div>
                     </td>
-                    <td className="p-4">{d.role}</td>
-                    <td className="p-4 font-bold">${Number(d.amount).toFixed(2)}</td>
-                    <td className="p-4">{new Date(d.created_at).toLocaleString()}</td>
-                    <td className="p-4"><span className={`badge ${d.status === 'PENDING' ? 'badge-danger' : 'badge-success'}`}>{d.status}</span></td>
-                    <td className="p-4 text-right">
+                    <td><span className="badge badge-neutral">{d.role}</span></td>
+                    <td className="font-bold text-primary">${Number(d.amount).toFixed(2)}</td>
+                    <td className="text-xs text-muted font-mono">{new Date(d.created_at).toLocaleString()}</td>
+                    <td><span className={`badge ${d.status === 'PENDING' ? 'badge-warning' : 'badge-success'}`}>{d.status}</span></td>
+                    <td>
                       {d.status === 'PENDING' && (
-                        <button className="btn btn-primary btn-sm" onClick={() => handleApproveDeposit(d.id)}>
-                          Approve & Mint
+                        <button className="btn btn-sm btn-approve" onClick={() => handleApproveDeposit(d.id)}>
+                          <CheckCircle size={12} /> Approve & Credit
                         </button>
                       )}
                     </td>
