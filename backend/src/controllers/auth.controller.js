@@ -20,13 +20,17 @@ exports.register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
+    // Utility & Regulator roles require admin approval (PENDING). Consumer & Prosumer are auto-activated (ACTIVE).
+    const requiresApproval = ['utility', 'regulator'].includes(role);
+    const initialStatus = requiresApproval ? 'PENDING' : 'ACTIVE';
+
     const client = await db.getPool().connect();
     try {
       await client.query('BEGIN');
       const result = await client.query(
-        `INSERT INTO users (name, email, password_hash, role, zone_id) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role, zone_id, status`,
-        [name, email, password_hash, role, zone_id || null]
+        `INSERT INTO users (name, email, password_hash, role, zone_id, status) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, zone_id, status`,
+        [name, email, password_hash, role, zone_id || null, initialStatus]
       );
       
       const user = result.rows[0];
@@ -36,14 +40,14 @@ exports.register = async (req, res, next) => {
       
       // Create user_request for admin review
       await client.query(
-        `INSERT INTO user_requests (user_id, role, zone_id) VALUES ($1, $2, $3)`,
-        [user.id, role, zone_id || null]
+        `INSERT INTO user_requests (user_id, role, zone_id, status) VALUES ($1, $2, $3, $4)`,
+        [user.id, role, zone_id || null, requiresApproval ? 'PENDING' : 'APPROVED']
       );
       
       await client.query('COMMIT');
       
       // Audit log
-      auditService.log(user.id, role, 'USER_REGISTERED', 'user', user.id, 'PENDING', { name, email, role, zone_id }, req.ip);
+      auditService.log(user.id, role, 'USER_REGISTERED', 'user', user.id, initialStatus, { name, email, role, zone_id }, req.ip);
       
       res.status(201).json(user);
     } catch (err) {
@@ -73,6 +77,19 @@ exports.login = async (req, res, next) => {
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Enforce approval status for restricted roles
+    if (user.status === 'PENDING') {
+      return res.status(403).json({ 
+        error: 'Your account registration request is pending admin approval. You will be able to log in once an administrator approves your account.' 
+      });
+    }
+
+    if (user.status === 'REJECTED') {
+      return res.status(403).json({ 
+        error: 'Your registration request was rejected by the administrator. Access denied.' 
+      });
     }
 
     const token = jwt.sign({ id: user.id, role: user.role, zone_id: user.zone_id }, JWT_SECRET, { expiresIn: '1d' });
