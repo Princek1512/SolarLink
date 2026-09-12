@@ -1,0 +1,6 @@
+{
+  "name": "solarlink-blockchain",
+  "version": "1.0.0",
+  "description": "Blockchain Adapter",
+  "main": "src/adapter/BlockchainAdapter.js"
+}
