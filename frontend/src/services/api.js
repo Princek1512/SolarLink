@@ -59,7 +59,9 @@ export default {
   getTrades: () => api.get('/trades'),
   getTrade: (id) => api.get(`/trades/${id}`),
   getTradeEvents: (id) => api.get(`/trades/${id}/events`),
-  verifyDelivery: (id) => api.post(`/trades/${id}/delivery/verify`),
+  lockTrade: (id) => api.post(`/trades/${id}/lock`),
+  verifyDelivery: (id, data) => api.post(`/trades/${id}/delivery/verify`, data || {}),
+  progressTrade: (id) => api.post(`/trades/${id}/progress`),
   
   // Wallet
   getWallet: () => api.get('/wallet'),

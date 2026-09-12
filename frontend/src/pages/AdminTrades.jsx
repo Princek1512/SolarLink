@@ -31,6 +31,38 @@ export default function AdminTrades() {
 
   useEffect(() => { fetchTrades(); }, [filter]);
 
+  const handleLock = async (id) => {
+    try {
+      await api.lockTrade(id);
+      toast.success('Trade locked! Microgrid capacity reserved.');
+      fetchTrades();
+    } catch (err) {
+      toast.error('Failed to lock trade: ' + err.toString());
+    }
+  };
+
+  const handleVerifyDelivery = async (id, contractedKwh) => {
+    const val = prompt(`Delivered kWh (Contracted: ${contractedKwh} kWh):`, contractedKwh);
+    if (val === null) return;
+    try {
+      await api.verifyDelivery(id, { deliveredKwh: Number(val) });
+      toast.success('Delivery recorded & trade settled!');
+      fetchTrades();
+    } catch (err) {
+      toast.error('Verification error: ' + err.toString());
+    }
+  };
+
+  const handleAutoProgress = async (id) => {
+    try {
+      await api.progressTrade(id);
+      toast.success('Trade auto-progressed to SETTLED!');
+      fetchTrades();
+    } catch (err) {
+      toast.error('Auto-progress failed: ' + err.toString());
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -118,6 +150,28 @@ export default function AdminTrades() {
                       )}
                     </div>
                   </div>
+
+                  {/* Actions Toolbar */}
+                  {t.status !== 'SETTLED' && t.status !== 'CANCELLED' && (
+                    <div className="p-3 mb-4 rounded flex items-center justify-between gap-4" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
+                      <div className="text-xs font-bold" style={{ color: '#3730a3' }}>LIFECYCLE ACTIONS</div>
+                      <div className="flex gap-2">
+                        {t.status === 'MATCHED' && (
+                          <button className="btn btn-sm btn-outline" onClick={() => handleLock(t.id)}>
+                            🔒 Lock Trade
+                          </button>
+                        )}
+                        {(t.status === 'MATCHED' || t.status === 'LOCKED') && (
+                          <button className="btn btn-sm btn-outline" onClick={() => handleVerifyDelivery(t.id, t.quantity_kwh)}>
+                            ⚡ Record Delivery & Verify
+                          </button>
+                        )}
+                        <button className="btn btn-sm btn-primary" onClick={() => handleAutoProgress(t.id)}>
+                          🚀 Complete Full Settlement Flow
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Parties */}
                   <div className="grid grid-cols-2 gap-6 mb-4">

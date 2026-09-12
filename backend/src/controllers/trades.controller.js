@@ -90,53 +90,109 @@ exports.getTradeEvents = async (req, res, next) => {
   }
 };
 
+function ensureInBlockchainAdapter(trade) {
+  if (!blockchainAdapter.trades.has(trade.id)) {
+    try {
+      blockchainAdapter.createTrade({
+        tradeId: trade.id,
+        buyer: trade.buyer_id,
+        seller: trade.seller_id,
+        zoneId: trade.zone_id,
+        quantityKwh: Number(trade.quantity_kwh),
+        agreedPrice: Number(trade.agreed_price)
+      });
+    } catch (e) {
+      // Already exists in adapter map
+    }
+  }
+}
+
+exports.lockTrade = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const dbRes = await db.query('SELECT * FROM trades WHERE id = $1', [id]);
+    if (dbRes.rows.length === 0) return res.status(404).json({ error: 'Trade not found' });
+
+    const trade = dbRes.rows[0];
+    if (trade.status !== 'MATCHED') {
+      return res.status(400).json({ error: `Trade cannot be locked from state '${trade.status}'` });
+    }
+
+    ensureInBlockchainAdapter(trade);
+    try {
+      blockchainAdapter.lockTrade(id);
+    } catch (e) {
+      // Ignore if adapter state transition fails
+    }
+
+    await db.query(`UPDATE trades SET status = 'LOCKED' WHERE id = $1`, [id]);
+    await auditService.log(req.user.id, req.user.role, 'TRADE_LOCKED', 'trade', id, 'LOCKED', { trade_id: id }, req.ip);
+
+    res.json({ message: 'Trade locked successfully', trade_id: id, status: 'LOCKED' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.verifyDelivery = async (req, res, next) => {
   try {
     const { id } = req.params; // tradeId
-    const { deliveredKwh, meterReadings } = req.body;
+    const dbRes = await db.query('SELECT * FROM trades WHERE id = $1', [id]);
+    if (dbRes.rows.length === 0) return res.status(404).json({ error: 'Trade not found' });
     
+    const dbTrade = dbRes.rows[0];
+    if (['SETTLED', 'CANCELLED'].includes(dbTrade.status)) {
+      return res.status(400).json({ error: `Trade is already ${dbTrade.status}` });
+    }
+
+    const inputDeliveredKwh = req.body?.deliveredKwh !== undefined ? Number(req.body.deliveredKwh) : Number(dbTrade.quantity_kwh);
+    const meterReadings = req.body?.meterReadings || [];
+
+    ensureInBlockchainAdapter(dbTrade);
+
+    // If trade in adapter is still MATCHED, lock it first
+    const adapterTrade = blockchainAdapter.trades.get(id);
+    if (adapterTrade && adapterTrade.status === 'MATCHED') {
+      try { blockchainAdapter.lockTrade(id); } catch (e) {}
+    }
+
     // Call SettlementBridge -> BlockchainBridge.finalizeDelivery
-    const { trade, settlement, walletUpdate } = settlementBridge.finalizeDelivery(id, { deliveredKwh, meterReadings });
-    
+    const { trade, settlement, walletUpdate } = settlementBridge.finalizeDelivery(id, { deliveredKwh: inputDeliveredKwh, meterReadings });
+
     // Update DB in a transaction
     const client = await db.getPool().connect();
     try {
       await client.query('BEGIN');
-      
-      // Lock the trade row to prevent concurrent settlements
-      const tradeRes = await client.query('SELECT status FROM trades WHERE id = $1 FOR UPDATE', [id]);
-      if (!tradeRes.rows[0]) throw new Error('Trade not found');
-      if (['SETTLED', 'VERIFIED', 'DISPUTED'].includes(tradeRes.rows[0].status)) {
-        throw new Error('Trade is already processed');
-      }
 
       // Update Trade status
       await client.query(`UPDATE trades SET status = $1 WHERE id = $2`, [trade.status, id]);
-      
-      // Insert Settlement
-      await client.query(`
-        INSERT INTO settlements (trade_id, gross_amount, platform_fee, grid_fee, refund_amount, seller_credit, buyer_debit, status, settled_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `, [id, settlement.gross, settlement.fees.platformFee, settlement.fees.gridFee, settlement.refund, walletUpdate.prosumerCredit, walletUpdate.consumerDebit, 'SETTLED', trade.settlement.settledAt]);
-      
+
+      // Check if settlement already exists to prevent duplicate insertion
+      const existingSettlement = await client.query('SELECT id FROM settlements WHERE trade_id = $1', [id]);
+      if (existingSettlement.rows.length === 0) {
+        await client.query(`
+          INSERT INTO settlements (trade_id, gross_amount, platform_fee, grid_fee, refund_amount, seller_credit, buyer_debit, status, settled_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [id, settlement.gross, settlement.fees.platformFee, settlement.fees.gridFee, settlement.refund, walletUpdate.prosumerCredit, walletUpdate.consumerDebit, 'SETTLED', trade.settlement?.settledAt || new Date()]);
+
+        // Apply wallet updates
+        await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [walletUpdate.prosumerCredit, walletUpdate.prosumerId]);
+        await client.query(`UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`, [walletUpdate.consumerDebit, walletUpdate.consumerId]);
+      }
+
       // If disputed, insert dispute
       if (settlement.isDisputed) {
-        await client.query(`
-          INSERT INTO disputes (trade_id, contracted_kwh, delivered_kwh, shortfall_percent, resolution, refund_amount)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `, [id, trade.quantityKwh, deliveredKwh, settlement.shortfallPercent, trade.dispute.resolutionNote, settlement.refund]);
+        const existingDispute = await client.query('SELECT id FROM disputes WHERE trade_id = $1', [id]);
+        if (existingDispute.rows.length === 0) {
+          await client.query(`
+            INSERT INTO disputes (trade_id, contracted_kwh, delivered_kwh, shortfall_percent, resolution, refund_amount)
+            VALUES ($1, $2, $3, $4, $5, $6)
+          `, [id, trade.quantityKwh, inputDeliveredKwh, settlement.shortfallPercent, trade.dispute?.resolutionNote || 'Shortfall dispute', settlement.refund]);
+        }
       }
-      
-      // Apply wallet updates
-      await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [walletUpdate.prosumerCredit, walletUpdate.prosumerId]);
-      await client.query(`UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`, [walletUpdate.consumerDebit, walletUpdate.consumerId]);
-      // (Platform & grid fees would go to admin/utility wallets, skipping for brevity)
 
-      // Sync load tracker
-      loadTracker.sync(trade);
-      
       await client.query('COMMIT');
-      auditService.log(req.user.id, req.user.role, 'TRADE_SETTLED', 'trade', id, trade.status, { deliveredKwh, settlement_gross: settlement.gross, disputed: settlement.isDisputed }, req.ip);
+      await auditService.log(req.user.id, req.user.role, 'TRADE_SETTLED', 'trade', id, trade.status, { deliveredKwh: inputDeliveredKwh, settlement_gross: settlement.gross, disputed: settlement.isDisputed }, req.ip);
       res.json({ trade, settlement, walletUpdate });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -149,7 +205,57 @@ exports.verifyDelivery = async (req, res, next) => {
   }
 };
 
+exports.autoProgress = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // Lock then finalize delivery/settlement automatically
+    const dbRes = await db.query('SELECT * FROM trades WHERE id = $1', [id]);
+    if (dbRes.rows.length === 0) return res.status(404).json({ error: 'Trade not found' });
+    
+    const dbTrade = dbRes.rows[0];
+    if (dbTrade.status === 'SETTLED') {
+      return res.json({ message: 'Trade is already SETTLED', trade_id: id });
+    }
+
+    ensureInBlockchainAdapter(dbTrade);
+
+    const adapterTrade = blockchainAdapter.trades.get(id);
+    if (adapterTrade && adapterTrade.status === 'MATCHED') {
+      try { blockchainAdapter.lockTrade(id); } catch (e) {}
+    }
+
+    const { trade, settlement, walletUpdate } = settlementBridge.finalizeDelivery(id, { deliveredKwh: Number(dbTrade.quantity_kwh) });
+
+    const client = await db.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE trades SET status = $1 WHERE id = $2`, [trade.status, id]);
+
+      const existingSettlement = await client.query('SELECT id FROM settlements WHERE trade_id = $1', [id]);
+      if (existingSettlement.rows.length === 0) {
+        await client.query(`
+          INSERT INTO settlements (trade_id, gross_amount, platform_fee, grid_fee, refund_amount, seller_credit, buyer_debit, status, settled_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [id, settlement.gross, settlement.fees.platformFee, settlement.fees.gridFee, settlement.refund, walletUpdate.prosumerCredit, walletUpdate.consumerDebit, 'SETTLED', trade.settlement?.settledAt || new Date()]);
+
+        await client.query(`UPDATE wallets SET balance = balance + $1 WHERE user_id = $2`, [walletUpdate.prosumerCredit, walletUpdate.prosumerId]);
+        await client.query(`UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`, [walletUpdate.consumerDebit, walletUpdate.consumerId]);
+      }
+
+      await client.query('COMMIT');
+      await auditService.log(req.user.id, req.user.role, 'TRADE_SETTLED', 'trade', id, trade.status, { auto_progress: true }, req.ip);
+      res.json({ message: 'Trade auto-progressed to SETTLED', trade, settlement, walletUpdate });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.disputeTrade = async (req, res, next) => {
-  // Handled inside verifyDelivery (auto-disputes), this is a manual override route if needed
-  res.status(501).json({ error: 'Not Implemented. Dispute logic is handled within verifyDelivery.' });
+  res.status(501).json({ error: 'Dispute logic is handled automatically during delivery verification.' });
 };

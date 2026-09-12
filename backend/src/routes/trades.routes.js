@@ -16,7 +16,9 @@ router.post('/match', verifyToken, requireRole(['admin', 'trading_engine']), asy
 router.get('/', verifyToken, tradesController.getTrades);
 router.get('/:id', verifyToken, tradesController.getTrade);
 router.get('/:id/events', verifyToken, tradesController.getTradeEvents);
-router.post('/:id/delivery/verify', verifyToken, requireRole(['admin', 'meter_verifier']), tradesController.verifyDelivery);
+router.post('/:id/lock', verifyToken, requireRole(['admin', 'prosumer', 'consumer']), tradesController.lockTrade);
+router.post('/:id/delivery/verify', verifyToken, requireRole(['admin', 'meter_verifier', 'prosumer', 'consumer']), tradesController.verifyDelivery);
+router.post('/:id/progress', verifyToken, requireRole(['admin', 'prosumer', 'consumer']), tradesController.autoProgress);
 router.post('/:id/dispute', verifyToken, requireRole(['admin']), tradesController.disputeTrade);
 
 module.exports = router;
