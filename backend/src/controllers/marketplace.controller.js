@@ -63,20 +63,23 @@ exports.createListing = async (req, res, next) => {
       const meterRes = await db.query('SELECT id FROM smart_meters WHERE asset_id = $1', [assetRes.rows[0].id]);
       if (meterRes.rows.length === 0) return res.status(400).json({ error: 'No active meter found' });
       
-      const meterId = meterRes.rows[0].id;
-      const latestRes = await db.query(`SELECT generation_kwh, consumption_kwh FROM meter_readings WHERE meter_id = $1 ORDER BY timestamp DESC LIMIT 1`, [meterId]);
+      const meterIds = meterRes.rows.map(m => m.id);
+      const sumRes = await db.query(`
+        SELECT COALESCE(SUM(generation_kwh), 0) as total_gen, COALESCE(SUM(consumption_kwh), 0) as total_cons
+        FROM meter_readings 
+        WHERE meter_id = ANY($1::uuid[]) AND timestamp >= NOW() - INTERVAL '24 hours'
+      `, [meterIds]);
       
       let currentEligibleSurplus = 0;
-      if (latestRes.rows.length > 0) {
-        const l = latestRes.rows[0];
-        currentEligibleSurplus = Math.max(0, parseFloat(l.generation_kwh) - parseFloat(l.consumption_kwh));
+      if (sumRes.rows.length > 0) {
+        currentEligibleSurplus = Math.max(0, parseFloat(sumRes.rows[0].total_gen) - parseFloat(sumRes.rows[0].total_cons));
       }
       
       const activeListingsRes = await db.query(`SELECT COALESCE(SUM(remaining_kwh), 0) as committed FROM energy_listings WHERE seller_id = $1 AND status = 'ACTIVE'`, [req.user.id]);
       const activeTradesRes = await db.query(`SELECT COALESCE(SUM(quantity_kwh), 0) as trade_committed FROM trades WHERE seller_id = $1 AND status IN ('MATCHED', 'LOCKED', 'DELIVERED')`, [req.user.id]);
       
       const alreadyCommittedQuantity = parseFloat(activeListingsRes.rows[0].committed) + parseFloat(activeTradesRes.rows[0].trade_committed);
-      const availableSellableEnergy = currentEligibleSurplus - alreadyCommittedQuantity;
+      const availableSellableEnergy = Math.max(0, currentEligibleSurplus - alreadyCommittedQuantity);
       
       if (quantity_kwh > availableSellableEnergy) {
         return res.status(400).json({ error: 'INSUFFICIENT_SURPLUS', message: `Cannot sell ${quantity_kwh} kWh. Only ${availableSellableEnergy.toFixed(2)} kWh available.` });
@@ -115,19 +118,23 @@ exports.updateListing = async (req, res, next) => {
       quantity_kwh = parseFloat(quantity_kwh);
       const assetRes = await db.query('SELECT id FROM solar_assets WHERE user_id = $1', [req.user.id]);
       const meterRes = await db.query('SELECT id FROM smart_meters WHERE asset_id = $1', [assetRes.rows[0].id]);
-      const meterId = meterRes.rows[0].id;
-      const latestRes = await db.query(`SELECT generation_kwh, consumption_kwh FROM meter_readings WHERE meter_id = $1 ORDER BY timestamp DESC LIMIT 1`, [meterId]);
+      const meterIds = meterRes.rows.map(m => m.id);
+      const sumRes = await db.query(`
+        SELECT COALESCE(SUM(generation_kwh), 0) as total_gen, COALESCE(SUM(consumption_kwh), 0) as total_cons
+        FROM meter_readings 
+        WHERE meter_id = ANY($1::uuid[]) AND timestamp >= NOW() - INTERVAL '24 hours'
+      `, [meterIds]);
       
       let currentEligibleSurplus = 0;
-      if (latestRes.rows.length > 0) {
-        currentEligibleSurplus = Math.max(0, parseFloat(latestRes.rows[0].generation_kwh) - parseFloat(latestRes.rows[0].consumption_kwh));
+      if (sumRes.rows.length > 0) {
+        currentEligibleSurplus = Math.max(0, parseFloat(sumRes.rows[0].total_gen) - parseFloat(sumRes.rows[0].total_cons));
       }
       
       const activeListingsRes = await db.query(`SELECT COALESCE(SUM(remaining_kwh), 0) as committed FROM energy_listings WHERE seller_id = $1 AND status = 'ACTIVE' AND id != $2`, [req.user.id, id]);
       const activeTradesRes = await db.query(`SELECT COALESCE(SUM(quantity_kwh), 0) as trade_committed FROM trades WHERE seller_id = $1 AND status IN ('MATCHED', 'LOCKED', 'DELIVERED')`, [req.user.id]);
       
       const alreadyCommittedQuantity = parseFloat(activeListingsRes.rows[0].committed) + parseFloat(activeTradesRes.rows[0].trade_committed);
-      const availableSellableEnergy = currentEligibleSurplus - alreadyCommittedQuantity;
+      const availableSellableEnergy = Math.max(0, currentEligibleSurplus - alreadyCommittedQuantity);
       
       if (quantity_kwh > availableSellableEnergy) {
         return res.status(400).json({ error: 'INSUFFICIENT_SURPLUS', message: `Cannot update to ${quantity_kwh} kWh. Only ${availableSellableEnergy.toFixed(2)} kWh available.` });

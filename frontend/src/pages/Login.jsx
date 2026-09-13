@@ -38,11 +38,13 @@ export default function Login() {
         } else {
           // Consumer and Prosumer get logged in directly without needing approval
           const res = await api.login({ email: formData.email, password: formData.password });
+          sessionStorage.setItem('token', res.token);
           localStorage.setItem('token', res.token);
           navigate('/dashboard');
         }
       } else {
         const res = await api.login({ email: formData.email, password: formData.password });
+        sessionStorage.setItem('token', res.token);
         localStorage.setItem('token', res.token);
         navigate('/dashboard');
       }
