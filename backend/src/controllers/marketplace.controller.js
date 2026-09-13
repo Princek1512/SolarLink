@@ -4,7 +4,13 @@ const auditService = require('../services/audit.service');
 
 exports.getListings = async (req, res, next) => {
   try {
-    const { zone_id } = req.query;
+    let { zone_id } = req.query;
+
+    // If user is authenticated as a consumer, restrict their marketplace query strictly to their assigned zone_id
+    if (req.user && req.user.role === 'consumer' && req.user.zone_id) {
+      zone_id = req.user.zone_id;
+    }
+
     let query = `
       SELECT l.*, u.name as producer_name 
       FROM energy_listings l

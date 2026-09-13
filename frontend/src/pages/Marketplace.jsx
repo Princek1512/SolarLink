@@ -5,9 +5,12 @@ import ListingCard from '../components/ListingCard';
 import { ShoppingBag, Filter, CheckCircle, X } from 'lucide-react';
 
 export default function Marketplace({ user }) {
+  const isConsumer = user?.role === 'consumer';
+  const consumerZone = user?.zone_id;
+
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [zoneId, setZoneId] = useState('');
+  const [zoneId, setZoneId] = useState(isConsumer && consumerZone ? consumerZone : '');
   
   // Order form state
   const [selectedListing, setSelectedListing] = useState(null);
@@ -26,8 +29,9 @@ export default function Marketplace({ user }) {
   };
 
   useEffect(() => {
-    fetchListings(zoneId);
-  }, [zoneId]);
+    const effectiveZone = isConsumer && consumerZone ? consumerZone : zoneId;
+    fetchListings(effectiveZone);
+  }, [zoneId, user]);
 
   const handleBuySubmit = async (e) => {
     e.preventDefault();
@@ -38,7 +42,8 @@ export default function Marketplace({ user }) {
       toast.success('Energy Purchased Successfully!');
       setSelectedListing(null);
       setOrderQuantity('');
-      fetchListings(zoneId);
+      const effectiveZone = isConsumer && consumerZone ? consumerZone : zoneId;
+      fetchListings(effectiveZone);
     } catch (err) {
       toast.error(err.toString());
     }
@@ -53,20 +58,38 @@ export default function Marketplace({ user }) {
             <ShoppingBag size={24} color="var(--color-primary)" />
             <h1 className="mb-0">P2P Solar Marketplace</h1>
           </div>
-          <p className="text-sm text-muted mb-0 mt-1">Browse live prosumer surplus offers & execute localized microgrid purchases</p>
+          <p className="text-sm text-muted mb-0 mt-1">
+            {isConsumer && consumerZone ? (
+              <span className="font-medium text-emerald-600">Showing available energy deals restricted to your grid zone ({consumerZone})</span>
+            ) : (
+              'Browse live prosumer surplus offers & execute localized microgrid purchases'
+            )}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Filter size={16} color="var(--color-text-muted)" />
-          <select 
-            value={zoneId} 
-            onChange={(e) => setZoneId(e.target.value)}
-            style={{ width: '180px' }}
-          >
-            <option value="">All Grid Zones</option>
-            <option value="ZONE-1">Zone 1 (Downtown)</option>
-            <option value="ZONE-2">Zone 2 (Suburbs)</option>
-          </select>
+          {isConsumer && consumerZone ? (
+            <select 
+              value={consumerZone} 
+              disabled={true}
+              style={{ width: '220px', cursor: 'not-allowed', backgroundColor: '#f1f5f9', fontWeight: 'bold' }}
+            >
+              <option value={consumerZone}>{consumerZone} (Your Zone Only)</option>
+            </select>
+          ) : (
+            <select 
+              value={zoneId} 
+              onChange={(e) => setZoneId(e.target.value)}
+              style={{ width: '200px' }}
+            >
+              <option value="">All Grid Zones</option>
+              <option value="ZONE-1">Zone 1 (Downtown)</option>
+              <option value="ZONE-2">Zone 2 (Suburbs)</option>
+              <option value="ZONE-3">Zone 3 (Industrial Park)</option>
+              <option value="ZONE-4">Zone 4 (East Tech Belt)</option>
+            </select>
+          )}
         </div>
       </div>
 

@@ -132,6 +132,8 @@ export default function Login() {
                 <select name="zone_id" value={formData.zone_id} onChange={handleChange} required>
                   <option value="ZONE-1">ZONE-1 (Downtown Core)</option>
                   <option value="ZONE-2">ZONE-2 (North Suburbs)</option>
+                  <option value="ZONE-3">ZONE-3 (Industrial Park)</option>
+                  <option value="ZONE-4">ZONE-4 (East Coast Tech Belt)</option>
                 </select>
               </div>
             </>
